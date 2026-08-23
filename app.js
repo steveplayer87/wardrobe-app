@@ -26,6 +26,8 @@ const ICONS = {
   basket: `<svg viewBox="0 0 24 24" fill="none"><path d="M4.5 10h15l-1.4 8.4a1.5 1.5 0 0 1-1.5 1.3H7.4a1.5 1.5 0 0 1-1.5-1.3L4.5 10Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M3.5 10h17M8 10 9.5 5M16 10 14.5 5M12 13v5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
   camera: `<svg viewBox="0 0 24 24" fill="none"><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2l1-2h7l1 2h2A1.5 1.5 0 0 1 20 8.5v9A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5v-9Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12.5" r="3.2" stroke="currentColor" stroke-width="1.6"/></svg>`,
   download: `<svg viewBox="0 0 24 24" fill="none"><path d="M12 15V3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="m7 10 5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  undo: `<svg viewBox="0 0 24 24" fill="none"><path d="M9 7 4 12l5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 12h8a6 6 0 0 1 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+  redo: `<svg viewBox="0 0 24 24" fill="none"><path d="m15 7 5 5-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 12h-8a6 6 0 0 0-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
   shopping: `<svg viewBox="0 0 24 24" fill="none"><path d="M6 8.5h12l1 11H5l1-11Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 9V6.5a3 3 0 0 1 6 0V9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
   link: `<svg viewBox="0 0 24 24" fill="none"><path d="M10 13.5a4 4 0 0 0 5.7.1l2.1-2.1a4 4 0 0 0-5.7-5.7l-1.2 1.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M14 10.5a4 4 0 0 0-5.7-.1l-2.1 2.1a4 4 0 0 0 5.7 5.7l1.2-1.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
   edit: `<svg viewBox="0 0 24 24" fill="none"><path d="M14.5 4.5 19.5 9.5 8.5 20.5H3.5v-5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>`,
@@ -145,17 +147,11 @@ async function compressImageFile(file, maxDim = 640, quality = 0.82) {
   const canvas = document.createElement('canvas');
   canvas.width = width; canvas.height = height;
   const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, width, height);
   ctx.drawImage(img, 0, 0, width, height);
-
-  // PNG/GIF/WebP sources may carry real transparency — keep it (output PNG).
-  // Anything else (photos, JPEGs) gets flattened to JPEG for a smaller file.
-  const sourceMightHaveAlpha = /image\/(png|gif|webp)/.test(file.type);
-  if (sourceMightHaveAlpha) {
-    const { data } = ctx.getImageData(0, 0, width, height);
-    let hasAlpha = false;
-    for (let i = 3; i < data.length; i += 4) { if (data[i] < 255) { hasAlpha = true; break; } }
-    if (hasAlpha) return canvas.toDataURL('image/png');
-  }
+  // Keep all new uploads opaque and white-backed. This avoids black alpha
+  // rendering differences between iOS PWA surfaces and background images.
   return canvas.toDataURL('image/jpeg', quality);
 }
 
@@ -306,6 +302,9 @@ function defaultState() {
   return {
     profile: {
       name: '',
+      avatar: '',
+      cardImageScale: 72,
+      weather: { city: '', latitude: null, longitude: null, timezone: 'auto', current: null, updatedAt: 0 },
       washThresholds: { bottom: 3, outer: 5, shoes: 8, hat: 8, accessory: 8 },
       categoryAspect: { top: '1:1', bottom: '3:4', outer: '1:1', shoes: '1:1', hat: '1:1', accessory: '1:1' },
     },
@@ -332,6 +331,9 @@ function loadState() {
     const profile = Object.assign({}, base.profile, parsed.profile || {});
     profile.washThresholds = Object.assign({}, base.profile.washThresholds, (parsed.profile && parsed.profile.washThresholds) || {});
     profile.categoryAspect = Object.assign({}, base.profile.categoryAspect, (parsed.profile && parsed.profile.categoryAspect) || {});
+    profile.weather = Object.assign({}, base.profile.weather, (parsed.profile && parsed.profile.weather) || {});
+    profile.cardImageScale = Math.min(100, Math.max(45, Number(profile.cardImageScale) || 72));
+    profile.avatar = typeof profile.avatar === 'string' ? profile.avatar : '';
     return {
       profile,
       items: Array.isArray(parsed.items) ? parsed.items : [],
@@ -359,17 +361,111 @@ function normalizeLoadedState() {
     if (item.status !== 'resting') item.restingSince = item.restingSince || null;
   });
   state.wishlist = Array.isArray(state.wishlist) ? state.wishlist : [];
+  state.profile = state.profile || {};
+  state.profile.cardImageScale = Math.min(100, Math.max(45, Number(state.profile.cardImageScale) || 72));
+  state.profile.avatar = typeof state.profile.avatar === 'string' ? state.profile.avatar : '';
+  state.profile.weather = Object.assign({ city: '', latitude: null, longitude: null, timezone: 'auto', current: null, updatedAt: 0 }, state.profile.weather || {});
   state.drafts = Object.assign({ addItem: null, wishlist: null }, state.drafts || {});
 }
 normalizeLoadedState();
 
-function saveState() {
+const HISTORY_LIMIT = 40;
+let historyReady = false;
+let historySnapshot = null;
+let undoStack = [];
+let redoStack = [];
+let undoViews = [];
+let redoViews = [];
+let lastHistoryAt = 0;
+let lastChangedView = 'home';
+let activeView = 'home';
+let applyingHistory = false;
+function cloneState(value) { return JSON.parse(JSON.stringify(value)); }
+function stateSignature(value) { return JSON.stringify(value); }
+function updateHistoryControls() {
+  const undo = document.getElementById('btnUndo');
+  const redo = document.getElementById('btnRedo');
+  if (undo) undo.disabled = undoStack.length === 0;
+  if (redo) redo.disabled = redoStack.length === 0;
+}
+function pushHistory(before) {
+  const now = Date.now();
+  if (now - lastHistoryAt > 650 || !undoStack.length) {
+    undoStack.push(cloneState(before));
+    undoViews.push(lastChangedView);
+    if (undoStack.length > HISTORY_LIMIT) { undoStack.shift(); undoViews.shift(); }
+  }
+  lastHistoryAt = now;
+  redoStack = [];
+  redoViews = [];
+}
+function saveState(options = {}) {
+  const next = cloneState(state);
+  if (historyReady && !applyingHistory && !options.skipHistory) {
+    if (!historySnapshot || stateSignature(historySnapshot) !== stateSignature(next)) pushHistory(historySnapshot);
+  }
+  historySnapshot = next;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    updateHistoryControls();
   } catch (e) {
     console.error(e);
     toast('儲存失敗，裝置空間可能不足');
   }
+}
+function replaceStateFromSnapshot(snapshot) {
+  Object.keys(state).forEach(key => delete state[key]);
+  Object.assign(state, cloneState(snapshot));
+}
+function activateView(view) {
+  activeView = view;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('is-active', b.dataset.view === view));
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('is-active', v.id === 'view-' + view));
+  const app = document.getElementById('app');
+  const isHome = view === 'home';
+  app.classList.toggle('is-home-view', isHome);
+  document.body.classList.toggle('home-page', isHome);
+  document.getElementById('mainScroll').scrollTop = 0;
+}
+function restoreHistoryView(view) {
+  if (view && document.getElementById('view-' + view)) {
+    forceCloseModal({ skipPersist: true });
+    activateView(view);
+  }
+}
+function undoState() {
+  if (!undoStack.length) return;
+  const target = undoStack.pop();
+  const targetView = undoViews.pop() || activeView;
+  redoStack.push(cloneState(state));
+  redoViews.push(activeView);
+  applyingHistory = true;
+  replaceStateFromSnapshot(target);
+  saveState({ skipHistory: true });
+  applyingHistory = false;
+  renderAll();
+  renderAvatar();
+  renderCardImageScale();
+  updateHistoryControls();
+  restoreHistoryView(targetView);
+  toast('已復原上一步變更');
+}
+function redoState() {
+  if (!redoStack.length) return;
+  const target = redoStack.pop();
+  const targetView = redoViews.pop() || activeView;
+  undoStack.push(cloneState(state));
+  undoViews.push(activeView);
+  applyingHistory = true;
+  replaceStateFromSnapshot(target);
+  saveState({ skipHistory: true });
+  applyingHistory = false;
+  renderAll();
+  renderAvatar();
+  renderCardImageScale();
+  updateHistoryControls();
+  restoreHistoryView(targetView);
+  toast('已重做下一步變更');
 }
 
 function ensureNewDay() {
@@ -631,24 +727,147 @@ function renderAll() {
   renderWardrobe();
   renderConsumables();
   renderNotifications();
+  renderWishlist();
+  renderAvatar();
+  renderCardImageScale();
 }
 
 function renderHeader() {
   document.getElementById('headerDate').textContent = fmtHeaderDate();
   document.getElementById('headerGreeting').textContent = state.profile.name ? `哈囉，${state.profile.name}` : '哈囉';
-  const hour = new Date().getHours();
-  const isNight = hour >= 18 || hour < 6;
+  const current = state.profile.weather?.current;
+  const isNight = current && current.is_day != null ? Number(current.is_day) === 0 : (new Date().getHours() >= 18 || new Date().getHours() < 6);
+  const app = document.getElementById('app');
+  app.classList.toggle('is-night-view', isNight);
+  document.body.classList.toggle('night-page', isNight && document.body.classList.contains('home-page'));
+  const themeMeta = document.querySelector('meta[name="theme-color"]');
+  if (themeMeta) themeMeta.setAttribute('content', isNight ? '#232C48' : '#CFE0F5');
   document.getElementById('sceneSky').classList.toggle('is-night', isNight);
+  renderWeather();
 }
 
 function itemPhotoStyle(item) {
-  return item.image ? `background-color:#fff;background-image:url('${item.image}');background-repeat:no-repeat;background-position:center;background-size:cover` : 'background-color:#fff';
+  return item.image ? `background-color:#fff;background-image:url('${item.image}');background-repeat:no-repeat;background-position:center` : 'background-color:#fff';
 }
 function calendarPhotoStyle(item) {
   return item.image ? `background-color:#fff;background-image:url('${item.image}');background-repeat:no-repeat;background-position:center bottom;background-size:contain` : 'background-color:#fff';
 }
 function thumbInner(item) {
   return item.image ? '' : (categoryIcon(item.category) || '');
+}
+
+function renderAvatar() {
+  const img = document.getElementById('avatarImage');
+  const fallback = document.getElementById('avatarFallback');
+  const btn = document.getElementById('btnSettings');
+  const src = state.profile.avatar || '';
+  if (!img || !fallback || !btn) return;
+  img.hidden = !src;
+  fallback.hidden = !!src;
+  btn.classList.toggle('has-avatar', !!src);
+  if (src) img.src = src;
+  const preview = document.getElementById('avatarPreview');
+  const clear = document.getElementById('btnClearAvatar');
+  if (preview) {
+    if (src) {
+      preview.style.backgroundImage = `url('${src}')`;
+      preview.classList.add('has-photo');
+      preview.innerHTML = '<span>更換頭像圖片</span>';
+    } else {
+      preview.removeAttribute('style');
+      preview.classList.remove('has-photo');
+      preview.innerHTML = '<span data-icon="camera"></span><span>上傳頭像圖片</span>';
+      applyStaticIcons();
+    }
+  }
+  if (clear) clear.classList.toggle('is-hidden', !src);
+}
+function renderCardImageScale() {
+  const value = Math.min(100, Math.max(45, Number(state.profile.cardImageScale) || 72));
+  state.profile.cardImageScale = value;
+  document.getElementById('app')?.style.setProperty('--card-image-size', `${value}% auto`);
+  const slider = document.getElementById('cardImageScale');
+  const output = document.getElementById('cardImageScaleValue');
+  if (slider) slider.value = String(value);
+  if (output) output.textContent = `${value}%`;
+}
+const WEATHER_LABELS = {
+  0: ['晴朗', '☀'], 1: ['大致晴朗', '☀'], 2: ['局部多雲', '◒'], 3: ['陰天', '☁'],
+  45: ['霧', '≋'], 48: ['霧', '≋'], 51: ['細雨', '雨'], 53: ['細雨', '雨'], 55: ['細雨', '雨'],
+  56: ['冰雨', '雨'], 57: ['冰雨', '雨'], 61: ['小雨', '雨'], 63: ['中雨', '雨'], 65: ['大雨', '雨'],
+  66: ['冰雨', '雨'], 67: ['冰雨', '雨'], 71: ['小雪', '雪'], 73: ['中雪', '雪'], 75: ['大雪', '雪'],
+  77: ['雪粒', '雪'], 80: ['陣雨', '雨'], 81: ['陣雨', '雨'], 82: ['大陣雨', '雨'],
+  85: ['陣雪', '雪'], 86: ['大陣雪', '雪'], 95: ['雷雨', '雷'], 96: ['雷雨', '雷'], 99: ['雷雨', '雷'],
+};
+function weatherText(code) { return WEATHER_LABELS[Number(code)] || ['天氣', '•']; }
+function renderWeather() {
+  const el = document.getElementById('sceneWeather');
+  if (!el) return;
+  const w = state.profile.weather || {};
+  if (!w.city || !w.current) { el.textContent = w.city ? `${w.city}・天氣更新中` : '設定城市後顯示天氣'; return; }
+  const [label, symbol] = weatherText(w.current.weather_code);
+  const temp = Number.isFinite(Number(w.current.temperature_2m)) ? `${Math.round(Number(w.current.temperature_2m))}°` : '';
+  el.textContent = `${w.city}・${symbol} ${label}${temp ? ` ${temp}` : ''}`;
+}
+function syncWeatherSettings() {
+  const input = document.getElementById('weatherCityInput');
+  const status = document.getElementById('weatherStatus');
+  if (!input || !status) return;
+  const w = state.profile.weather || {};
+  input.value = w.city || '';
+  status.textContent = w.city && w.current ? `${w.city}・上次更新 ${new Date(w.updatedAt || Date.now()).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}` : (w.city ? `${w.city}・等待天氣資料` : '選擇城市後，景觀窗會顯示目前天氣。');
+}
+const CITY_SEARCH_ALIASES = { '台北': 'Taipei', '臺北': 'Taipei', '台中': 'Taichung', '臺中': 'Taichung', '台南': 'Tainan', '臺南': 'Tainan', '高雄': 'Kaohsiung', '新竹': 'Hsinchu', '基隆': 'Keelung', '桃園': 'Taoyuan', '香港': 'Hong Kong', '澳門': 'Macau' };
+async function searchWeatherCities() {
+  const input = document.getElementById('weatherCityInput');
+  const results = document.getElementById('weatherSearchResults');
+  const q = input?.value.trim();
+  if (!results || !q || q.length < 2) { if (results) results.innerHTML = '<p class="settings-helper">請輸入至少兩個字再搜尋。</p>'; return; }
+  results.innerHTML = '<p class="settings-helper">搜尋城市中…</p>';
+  try {
+    const terms = [q, CITY_SEARCH_ALIASES[q]].filter(Boolean);
+    let locations = [];
+    for (const term of terms) {
+      const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(term)}&count=6&language=zh&format=json`;
+      const response = await fetch(url);
+      if (!response.ok) continue;
+      const data = await response.json();
+      locations = Array.isArray(data.results) ? data.results : [];
+      if (locations.length) break;
+    }
+    results.innerHTML = locations.length ? locations.map((loc, i) => `<button type="button" class="weather-result" data-weather-index="${i}"><b>${escapeHtml(loc.name)}</b><span>${escapeHtml([loc.admin2 || loc.admin1, loc.country].filter(Boolean).join(' · '))}</span></button>`).join('') : '<p class="settings-helper">找不到這個城市，請換個名稱試試。</p>';
+    results._locations = locations;
+  } catch (e) {
+    results.innerHTML = '<p class="settings-helper">城市搜尋暫時失敗，請確認網路後再試。</p>';
+  }
+}
+async function selectWeatherLocation(location) {
+  if (!location) return;
+  state.profile.weather = { city: [location.name, location.admin2 || location.admin1, location.country].filter(Boolean).filter((value, index, values) => values.indexOf(value) === index).join(' · '), latitude: location.latitude, longitude: location.longitude, timezone: location.timezone || 'auto', current: null, updatedAt: 0 };
+  saveState();
+  syncWeatherSettings();
+  renderHeader();
+  await refreshWeather(true);
+}
+async function refreshWeather(force = false) {
+  const w = state.profile.weather || {};
+  if (w.latitude == null || w.longitude == null) { syncWeatherSettings(); renderWeather(); return; }
+  if (!force && w.current && Date.now() - Number(w.updatedAt || 0) < 30 * 60 * 1000) { renderWeather(); return; }
+  const status = document.getElementById('weatherStatus');
+  if (status) status.textContent = `${w.city}・正在更新天氣…`;
+  try {
+    const params = new URLSearchParams({ latitude: String(w.latitude), longitude: String(w.longitude), current: 'temperature_2m,weather_code,is_day,relative_humidity_2m', timezone: 'auto' });
+    const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
+    if (!response.ok) throw new Error('forecast failed');
+    const data = await response.json();
+    state.profile.weather = { ...w, timezone: data.timezone || w.timezone || 'auto', current: data.current || null, updatedAt: Date.now() };
+    saveState();
+    renderHeader();
+    syncWeatherSettings();
+  } catch (e) {
+    if (status) status.textContent = `${w.city}・天氣暫時無法更新，稍後可再試。`;
+    renderWeather();
+  }
 }
 
 function renderHome() {
@@ -958,12 +1177,31 @@ function renderCalStats() {
 
 function renderRank() {
   const list = document.getElementById('rankList');
+  const statsWrap = document.getElementById('rankStats');
+  const entries = allOotdEntries();
+  const monthPrefix = `${uiCalMonth.y}-${String(uiCalMonth.m + 1).padStart(2, '0')}`;
+  const monthEntries = entries.filter(e => e.date?.startsWith(monthPrefix));
+  const activeItems = state.items.filter(i => i.status !== 'retired');
+  const wornItems = new Set(monthEntries.flatMap(e => ALL_SLOTS.map(s => e[s]).filter(Boolean)));
+  const totalWear = state.items.reduce((sum, i) => sum + (i.totalWearCount || 0), 0);
+  const rankedAll = state.items.slice().sort((a, b) => (b.totalWearCount || 0) - (a.totalWearCount || 0));
+  const topWear = rankedAll[0]?.totalWearCount || 0;
+  const laundryCount = state.items.filter(i => i.status === 'dirty').length;
+  const monthWear = monthEntries.reduce((sum, e) => sum + ALL_SLOTS.filter(s => e[s]).length, 0);
+  const stats = [
+    { label: '最常穿比例', value: `${totalWear ? Math.round(topWear / totalWear * 100) : 0}%` },
+    { label: '本月穿搭天數', value: `${new Set(monthEntries.map(e => e.date)).size} 天` },
+    { label: '本月選用單品', value: `${wornItems.size} 件` },
+    { label: '本月穿著次數', value: `${monthWear} 次` },
+    { label: '衣櫥使用率', value: `${activeItems.length ? Math.round(wornItems.size / activeItems.length * 100) : 0}%` },
+    { label: '目前待洗單品', value: `${laundryCount} 件` },
+  ];
+  if (statsWrap) statsWrap.innerHTML = stats.map(s => `<div class="rank-stat-card"><p>${s.label}</p><b>${s.value}</b></div>`).join('');
   const ranked = state.items.filter(i => (i.totalWearCount||0) > 0)
     .slice().sort((a,b) => (b.totalWearCount||0) - (a.totalWearCount||0)).slice(0, 21);
   list.innerHTML = '';
   if (!ranked.length) {
     list.innerHTML = `<p class="empty-hint">還沒有穿搭紀錄，去主頁試穿看看吧</p>`;
-    return;
   }
   ranked.forEach((item, idx) => {
     const card = document.createElement('button');
@@ -989,7 +1227,7 @@ function openDayDetail(dateStr, entry) {
   const rows = ALL_SLOTS.filter(s => entry[s]).map(s => {
     const item = findItem(entry[s]);
     if (!item) return `<div class="day-detail-row"><p class="ddr-name">（已刪除的衣物）</p></div>`;
-    const thumb = item.image ? `<img class="ddr-thumb" src="${item.image}" alt="">` : `<span class="ddr-thumb">${categoryIcon(item.category)}</span>`;
+    const thumb = item.image ? `<img class="ddr-thumb" style="background-color:#fff" src="${item.image}" alt="">` : `<span class="ddr-thumb">${categoryIcon(item.category)}</span>`;
     return `<button type="button" class="day-detail-row" data-item-id="${item.id}">${thumb}
       <div><p class="ddr-cat">${categoryLabel(item.category)}</p><p class="ddr-name">${escapeHtml(item.name)}</p></div></button>`;
   });
@@ -1183,25 +1421,74 @@ function allWishlistTagsUsed() {
   state.wishlist.forEach(item => (item.tags || []).forEach(tag => set.add(tag)));
   return Array.from(set).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
 }
+let uiWishlistSort = 'recent';
+let uiWishlistFilters = { category: 'all', tags: [] };
+let uiWishlistSearchQuery = '';
+let uiWishlistSelectMode = false;
+let uiWishlistSelectedIds = new Set();
+function wishlistFilterActive() { return uiWishlistFilters.category !== 'all' || uiWishlistFilters.tags.length > 0; }
+function wishlistMatchesSearch(item, q) {
+  if (!q) return true;
+  return [item.name, categoryLabel(item.category), ...(item.tags || [])].join(' ').toLowerCase().includes(q.toLowerCase());
+}
+function getVisibleWishlistItems() {
+  return state.wishlist.filter(item => {
+    if (uiWishlistFilters.category !== 'all' && item.category !== uiWishlistFilters.category) return false;
+    if (uiWishlistFilters.tags.length && !uiWishlistFilters.tags.every(t => (item.tags || []).includes(t))) return false;
+    return wishlistMatchesSearch(item, uiWishlistSearchQuery);
+  }).slice().sort((a, b) => {
+    if (uiWishlistSort === 'name') return a.name.localeCompare(b.name, 'zh-Hant');
+    if (uiWishlistSort === 'category') return categoryLabel(a.category).localeCompare(categoryLabel(b.category), 'zh-Hant');
+    return (b.createdAt || 0) - (a.createdAt || 0);
+  });
+}
+function updateWishlistSelectBar() {
+  const count = document.getElementById('wishlistSelectCount');
+  if (count) count.textContent = `已選 ${uiWishlistSelectedIds.size} 件`;
+  document.getElementById('wishlistSelectBar')?.classList.toggle('is-hidden', !uiWishlistSelectMode);
+  document.getElementById('view-inspiration')?.classList.toggle('wishlist-selecting', uiWishlistSelectMode);
+}
+function setWishlistSelectMode(on) {
+  uiWishlistSelectMode = on;
+  uiWishlistSelectedIds.clear();
+  updateWishlistSelectBar();
+  const btn = document.getElementById('btnWishlistSelectMode');
+  if (btn) { btn.classList.toggle('is-active', on); btn.textContent = on ? '完成' : '選取'; }
+  renderWishlist();
+}
 function renderWishlist() {
   const grid = document.getElementById('wishlistGrid');
   const empty = document.getElementById('wishlistEmpty');
   if (!grid || !empty) return;
+  const items = getVisibleWishlistItems();
+  const filterBadge = document.getElementById('wishlistFilterBadge');
+  if (filterBadge) filterBadge.hidden = !wishlistFilterActive();
   grid.innerHTML = '';
-  empty.hidden = state.wishlist.length !== 0;
-  state.wishlist.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).forEach(item => {
+  empty.hidden = items.length !== 0;
+  if (!items.length && (uiWishlistSearchQuery || wishlistFilterActive())) empty.textContent = '找不到符合條件的想買單品。';
+  else empty.textContent = '還沒有想買的單品，先記下一件吧。';
+  items.forEach(item => {
     const card = document.createElement('article');
-    card.className = 'wishlist-card';
+    card.className = 'wishlist-card' + (uiWishlistSelectMode ? ' is-selectable' : '') + (uiWishlistSelectedIds.has(item.id) ? ' is-selected' : '');
     const photo = item.image
-      ? `<div class="wishlist-photo" style="background-image:url('${item.image}')"></div>`
+      ? `<div class="wishlist-photo" style="background-color:#fff;background-image:url('${item.image}');background-repeat:no-repeat;background-position:center;background-size:contain"></div>`
       : `<div class="wishlist-photo wishlist-photo-empty">${ICONS.shopping}</div>`;
     const tags = (item.tags || []).map(tag => `<span class="wishlist-tag">${escapeHtml(tag)}</span>`).join('');
     const url = safeExternalUrl(item.referenceUrl);
-    card.innerHTML = `${photo}<div class="wishlist-card-body"><p class="wishlist-name">${escapeHtml(item.name)}</p><p class="wishlist-category">${categoryLabel(item.category)}</p><div class="wishlist-tags">${tags}</div><div class="wishlist-card-actions"><button type="button" class="btn-secondary wishlist-edit-btn">編輯</button>${url ? `<a class="btn-secondary wishlist-link" href="${url}" target="_blank" rel="noopener"><span data-icon="link"></span>參考網址</a>` : ''}</div></div>`;
-    card.addEventListener('click', e => { if (!e.target.closest('a') && !e.target.closest('button')) openWishlistModal(item.id); });
-    card.querySelector('.wishlist-edit-btn').addEventListener('click', () => openWishlistModal(item.id));
+    const actions = uiWishlistSelectMode ? '' : `<div class="wishlist-card-actions"><button type="button" class="btn-secondary wishlist-edit-btn">編輯</button>${url ? `<a class="btn-secondary wishlist-link" href="${url}" target="_blank" rel="noopener"><span data-icon="link"></span>參考網址</a>` : ''}</div>`;
+    card.innerHTML = `${photo}${uiWishlistSelectMode ? '<span class="wishlist-card-check"></span>' : ''}<div class="wishlist-card-body"><p class="wishlist-name">${escapeHtml(item.name)}</p><p class="wishlist-category">${categoryLabel(item.category)}</p><div class="wishlist-tags">${tags}</div>${actions}</div>`;
+    card.addEventListener('click', e => {
+      if (e.target.closest('a') || e.target.closest('button')) return;
+      if (uiWishlistSelectMode) {
+        if (uiWishlistSelectedIds.has(item.id)) uiWishlistSelectedIds.delete(item.id); else uiWishlistSelectedIds.add(item.id);
+        updateWishlistSelectBar();
+        renderWishlist();
+      } else openWishlistModal(item.id);
+    });
+    card.querySelector('.wishlist-edit-btn')?.addEventListener('click', () => openWishlistModal(item.id));
     grid.appendChild(card);
   });
+  updateWishlistSelectBar();
   applyStaticIcons();
 }
 function renderWishlistCategoryChips() {
@@ -1552,7 +1839,7 @@ function openAddModal(editId = null) {
     pendingPhotoBack = savedDraft.imageBack || null;
     setPhotoPreview(document.getElementById('photoPreviewWrap'), pendingPhoto, '上傳照片（可一次選2張，第2張當背面）');
     document.getElementById('photoBackHint').hidden = !pendingPhotoBack;
-    document.getElementById('btnReadjustPhoto').classList.toggle('is-hidden', !pendingPhoto);
+    document.getElementById('btnReadjustPhoto').classList.toggle('is-hidden', !pendingPhoto || !editId);
   }
 
   if (editId) {
@@ -1918,21 +2205,42 @@ function renderBackfillModal() {
 /* ============================================================
    FILTER MODAL
    ============================================================ */
+let filterContext = 'wardrobe';
 function refreshFilteredViews() {
   renderWardrobe();
+  renderWishlist();
   if (tryonCurrentSlot) renderTryonGridFor(tryonCurrentSlot, tryonCurrentCategory);
 }
-function openFilterModal() {
+function openFilterModal(context = 'wardrobe') {
+  filterContext = context;
+  const isWishlist = context === 'wishlist';
+  document.getElementById('filterModalTitle').textContent = isWishlist ? '篩選想買單品' : '篩選';
+  document.getElementById('filterStatusSection').classList.toggle('is-hidden', isWishlist);
+  document.getElementById('filterCategorySection').classList.toggle('is-hidden', !isWishlist);
   document.querySelectorAll('#filterStatusChips .chip').forEach(c => c.classList.toggle('is-active', c.getAttribute('data-status') === uiWardrobeFilters.status));
+  const categoryRow = document.getElementById('filterCategoryChips');
+  categoryRow.innerHTML = '';
+  if (isWishlist) {
+    [{ id: 'all', label: '全部' }].concat(allCategoryIds().map(id => ({ id, label: categoryLabel(id) }))).forEach(({ id, label }) => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'chip' + (uiWishlistFilters.category === id ? ' is-active' : '');
+      chip.textContent = label;
+      chip.addEventListener('click', () => { uiWishlistFilters.category = id; categoryRow.querySelectorAll('.chip').forEach(c => c.classList.remove('is-active')); chip.classList.add('is-active'); refreshFilteredViews(); });
+      categoryRow.appendChild(chip);
+    });
+  }
   const tagRow = document.getElementById('filterTagChips');
   tagRow.innerHTML = '';
-  allTagsUsed().forEach(t => {
+  const selectedTags = isWishlist ? uiWishlistFilters.tags : uiWardrobeFilters.tags;
+  (isWishlist ? allWishlistTagsUsed() : allTagsUsed()).forEach(t => {
     const chip = document.createElement('button');
     chip.type = 'button';
-    chip.className = 'chip' + (uiWardrobeFilters.tags.includes(t) ? ' is-active' : '');
+    chip.className = 'chip' + (selectedTags.includes(t) ? ' is-active' : '');
     chip.textContent = t;
     chip.addEventListener('click', () => {
-      uiWardrobeFilters.tags = uiWardrobeFilters.tags.includes(t) ? uiWardrobeFilters.tags.filter(x => x !== t) : uiWardrobeFilters.tags.concat(t);
+      if (isWishlist) uiWishlistFilters.tags = uiWishlistFilters.tags.includes(t) ? uiWishlistFilters.tags.filter(x => x !== t) : uiWishlistFilters.tags.concat(t);
+      else uiWardrobeFilters.tags = uiWardrobeFilters.tags.includes(t) ? uiWardrobeFilters.tags.filter(x => x !== t) : uiWardrobeFilters.tags.concat(t);
       chip.classList.toggle('is-active');
       refreshFilteredViews();
     });
@@ -1948,12 +2256,8 @@ function wireEvents() {
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       persistTransientForms();
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('is-active'));
-      btn.classList.add('is-active');
-      const view = btn.getAttribute('data-view');
-      document.querySelectorAll('.view').forEach(v => v.classList.remove('is-active'));
-      document.getElementById('view-' + view).classList.add('is-active');
-      document.getElementById('mainScroll').scrollTop = 0;
+      lastChangedView = btn.getAttribute('data-view');
+      activateView(lastChangedView);
     });
   });
 
@@ -2013,6 +2317,10 @@ function wireEvents() {
     const towel = state.consumables.find(c => isTowelId(c.id));
     setPickerBtn('pickThresholdTowel', towel ? towel.cycleDays : 7);
     document.getElementById('moreThresholdsWrap').classList.add('is-hidden');
+    renderAvatar();
+    renderCardImageScale();
+    syncWeatherSettings();
+    document.getElementById('weatherSearchResults').innerHTML = '';
     modalReturnTo = null;
     openModal('modal-settings');
   });
@@ -2066,17 +2374,23 @@ function wireEvents() {
   // wardrobe: sort + filter + search + select mode
   document.getElementById('sortSelect').addEventListener('change', e => { uiWardrobeSort = e.target.value; renderWardrobe(); });
   document.getElementById('btnAddItem').addEventListener('click', () => openAddModal(null));
-  document.getElementById('btnFilter').addEventListener('click', () => { modalReturnTo = null; openFilterModal(); });
+  const retiredBanner = document.getElementById('retiredBanner');
+  const openRetired = () => { uiWardrobeCat = 'retired'; uiSelectMode = false; uiSelectedIds.clear(); renderCategoryChips(); renderWardrobe(); document.getElementById('mainScroll').scrollTop = 0; };
+  retiredBanner?.addEventListener('click', openRetired);
+  retiredBanner?.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRetired(); } });
+  document.getElementById('btnFilter').addEventListener('click', () => { modalReturnTo = null; openFilterModal('wardrobe'); });
   document.getElementById('filterStatusChips').addEventListener('click', e => {
     const chip = e.target.closest('.chip'); if (!chip) return;
+    if (filterContext !== 'wardrobe') return;
     uiWardrobeFilters.status = chip.getAttribute('data-status');
     document.querySelectorAll('#filterStatusChips .chip').forEach(c => c.classList.remove('is-active'));
     chip.classList.add('is-active');
     refreshFilteredViews();
   });
   document.getElementById('btnFilterClear').addEventListener('click', () => {
-    uiWardrobeFilters = { status: 'all', tags: [] };
-    openFilterModal();
+    if (filterContext === 'wishlist') uiWishlistFilters = { category: 'all', tags: [] };
+    else uiWardrobeFilters = { status: 'all', tags: [] };
+    openFilterModal(filterContext);
     refreshFilteredViews();
   });
   document.getElementById('btnFilterApply').addEventListener('click', closeModal);
@@ -2170,6 +2484,20 @@ function wireEvents() {
 
   // wishlist / inspiration
   document.getElementById('btnAddWishlist').addEventListener('click', () => openWishlistModal());
+  document.getElementById('btnWishlistFilter').addEventListener('click', () => { modalReturnTo = null; openFilterModal('wishlist'); });
+  document.getElementById('wishlistSortSelect').addEventListener('change', e => { uiWishlistSort = e.target.value; renderWishlist(); });
+  document.getElementById('btnWishlistSearch').addEventListener('click', () => { const row = document.getElementById('wishlistSearchRow'); row.classList.toggle('is-hidden'); if (!row.classList.contains('is-hidden')) document.getElementById('wishlistSearchInput').focus(); });
+  document.getElementById('wishlistSearchInput').addEventListener('input', e => { uiWishlistSearchQuery = e.target.value.trim(); renderWishlist(); });
+  document.getElementById('btnWishlistSearchClear').addEventListener('click', () => { uiWishlistSearchQuery = ''; document.getElementById('wishlistSearchInput').value = ''; document.getElementById('wishlistSearchRow').classList.add('is-hidden'); renderWishlist(); });
+  document.getElementById('btnWishlistSelectMode').addEventListener('click', () => setWishlistSelectMode(!uiWishlistSelectMode));
+  document.getElementById('btnWishlistSelectCancel').addEventListener('click', () => setWishlistSelectMode(false));
+  document.getElementById('btnWishlistDeleteSelected').addEventListener('click', () => {
+    if (!uiWishlistSelectedIds.size) return;
+    openConfirm('刪除選取的想買單品？', `共 ${uiWishlistSelectedIds.size} 件，此動作無法復原`, [
+      { label: '取消', kind: 'secondary' },
+      { label: '刪除', kind: 'danger', onClick: () => { state.wishlist = state.wishlist.filter(item => !uiWishlistSelectedIds.has(item.id)); saveState(); setWishlistSelectMode(false); renderWishlist(); toast('已刪除選取的想買單品'); } },
+    ]);
+  });
   document.getElementById('wishlistForm').addEventListener('submit', e => { e.preventDefault(); saveWishlistForm(); });
   document.getElementById('wishlistCategoryChips').addEventListener('click', e => e.stopPropagation());
   document.getElementById('wishlistLengthToggle').addEventListener('click', e => {
@@ -2207,14 +2535,9 @@ function wireEvents() {
       const compressed = await compressImageFile(file);
       pendingWishlistPhoto = compressed;
       wishlistDirty = true;
+      setPhotoPreview(document.getElementById('wishlistPhotoPreviewWrap'), compressed, '加入參考圖片');
+      document.getElementById('btnReadjustWishlistPhoto').classList.toggle('is-hidden', !editingWishlistId);
       autoSaveWishlistDraft();
-      openPhotoAdjust(compressed, pendingWishlistCategory, finalUrl => {
-        pendingWishlistPhoto = finalUrl;
-        wishlistDirty = true;
-        setPhotoPreview(document.getElementById('wishlistPhotoPreviewWrap'), finalUrl, '加入參考圖片');
-        document.getElementById('btnReadjustWishlistPhoto').classList.remove('is-hidden');
-        autoSaveWishlistDraft();
-      });
     } catch (err) { toast('參考圖片處理失敗，請換一張試試'); }
     e.target.value = '';
   });
@@ -2309,15 +2632,12 @@ function wireEvents() {
         document.getElementById('photoBackHint').hidden = true;
       }
       formDirty = true;
-      openPhotoAdjust(frontCompressed, pendingCategory, finalUrl => {
-        pendingPhoto = finalUrl;
-        autoSaveAddItemDraft();
-        const wrap = document.getElementById('photoPreviewWrap');
-        wrap.setAttribute('style', `background-image:url('${pendingPhoto}')`);
-        wrap.classList.add('has-photo');
-        wrap.innerHTML = '';
-        document.getElementById('btnReadjustPhoto').classList.remove('is-hidden');
-      });
+      const wrap = document.getElementById('photoPreviewWrap');
+      wrap.setAttribute('style', `background-color:#fff;background-image:url('${pendingPhoto}')`);
+      wrap.classList.add('has-photo');
+      wrap.innerHTML = '';
+      document.getElementById('btnReadjustPhoto').classList.toggle('is-hidden', !editingItemId);
+      autoSaveAddItemDraft();
     } catch (err) {
       toast('照片處理失敗，請換一張試試');
     }
@@ -2479,6 +2799,22 @@ function wireEvents() {
     el.addEventListener('input', saveSettingsDraft);
     el.addEventListener('change', saveSettingsDraft);
   });
+  document.getElementById('cardImageScale').addEventListener('input', e => { state.profile.cardImageScale = Number(e.target.value); renderCardImageScale(); saveState(); renderWardrobe(); });
+  document.getElementById('avatarInput').addEventListener('change', async e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try { state.profile.avatar = await compressImageFile(file, 320, 0.86); saveState(); renderAvatar(); toast('頭像已更新'); }
+    catch (err) { toast('頭像處理失敗，請換一張圖片'); }
+    e.target.value = '';
+  });
+  document.getElementById('btnClearAvatar').addEventListener('click', () => { state.profile.avatar = ''; saveState(); renderAvatar(); toast('已移除自訂頭像'); });
+  document.getElementById('btnWeatherSearch').addEventListener('click', searchWeatherCities);
+  document.getElementById('weatherCityInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); searchWeatherCities(); } });
+  document.getElementById('weatherSearchResults').addEventListener('click', e => { const btn = e.target.closest('.weather-result'); if (!btn) return; const loc = e.currentTarget._locations?.[Number(btn.dataset.weatherIndex)]; selectWeatherLocation(loc); });
+  document.getElementById('btnWeatherRefresh').addEventListener('click', () => refreshWeather(true));
+  document.getElementById('btnUndo').addEventListener('click', undoState);
+  document.getElementById('btnRedo').addEventListener('click', redoState);
+
   document.getElementById('settingsForm').addEventListener('submit', e => {
     e.preventDefault();
     const readPicker = id => {
@@ -2497,6 +2833,8 @@ function wireEvents() {
     state.consumables.forEach(c => { if (isTowelId(c.id)) c.cycleDays = towelDays; });
     saveSettingsDraft();
     renderAll();
+    renderAvatar();
+    renderCardImageScale();
     toast('設定已儲存');
     modalReturnTo = null;
     forceCloseModal();
@@ -2512,7 +2850,12 @@ function init() {
   wirePhotoAdjust();
   renderCategoryChips();
   ensureNewDay();
+  historySnapshot = cloneState(state);
+  historyReady = true;
+  activateView('home');
   renderAll();
+  updateHistoryControls();
+  refreshWeather(false);
   setInterval(() => { ensureNewDay(); renderAll(); }, 5 * 60 * 1000);
 
   // small minimum splash time so it reads as an intentional launch moment
