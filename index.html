@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>衣櫥助手</title>
+<meta name="theme-color" content="#F7F8FA">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="衣櫥助手">
+<link rel="stylesheet" href="styles.css?v=20260823d">
+</head>
+<body>
+
+<div id="splashScreen">
+  <span class="splash-icon" data-icon="wardrobe"></span>
+  <p class="splash-text">載入中...</p>
+</div>
+
+<div id="app">
+
+  <!-- ===== Header ===== -->
+  <header class="app-header">
+    <div class="header-text">
+      <p class="header-date" id="headerDate">—</p>
+      <h1 class="header-greeting" id="headerGreeting">哈囉</h1>
+    </div>
+    <div class="header-actions">
+      <button class="icon-btn" id="btnNotifications" aria-label="提醒中心">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M6 10a6 6 0 0 1 12 0c0 4 1.5 5.5 2 6H4c.5-.5 2-2 2-6Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9.5 19a2.5 2.5 0 0 0 5 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <span class="badge-dot" id="notifBadge" hidden></span>
+      </button>
+      <button class="icon-btn avatar-btn" id="btnSettings" aria-label="設定">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8.5" r="3.2" stroke="currentColor" stroke-width="1.8"/><path d="M4.5 19.5c1.5-3.5 4.3-5 7.5-5s6 1.5 7.5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ===== Views ===== -->
+  <main id="mainScroll">
+
+    <!-- ---- Home ---- -->
+    <section class="view is-active" id="view-home">
+      <div class="scene-card">
+        <div class="scene-sky" id="sceneSky">
+          <span class="scene-orb" id="sceneOrb"></span>
+          <span class="scene-star s1"></span><span class="scene-star s2"></span><span class="scene-star s3"></span>
+        </div>
+        <p class="scene-label">今日穿搭</p>
+
+        <div class="figure-board" id="figureBoard">
+          <button class="figure-slot figure-hat" data-slot="hat" data-label="帽子">
+            <span class="figure-thumb" data-icon="hat"></span>
+          </button>
+          <div class="figure-core">
+            <button class="figure-slot figure-top" data-slot="top" data-label="上衣">
+              <span class="figure-thumb" data-icon="top"></span>
+            </button>
+            <button class="figure-slot figure-bottom" data-slot="bottom" data-label="褲子">
+              <span class="figure-thumb" data-icon="bottom"></span>
+            </button>
+          </div>
+          <button class="figure-slot figure-shoes" data-slot="shoes" data-label="鞋子">
+            <span class="figure-thumb" data-icon="shoes"></span>
+          </button>
+        </div>
+        <div class="figure-link-row">
+          <button class="figure-extras-link" id="figureExtrasLink">點此選擇外套／配件</button>
+          <button class="btn-clear-ootd" id="btnClearOotd">清空今日穿搭</button>
+        </div>
+      </div>
+
+      <div class="rack-row">
+        <div class="rack-card" id="card-basket" role="button" tabindex="0">
+          <div class="rack-card-head">
+            <span class="rack-icon" data-icon="basket"></span>
+            <p class="rack-title" id="basketTitle">洗衣籃</p>
+          </div>
+          <div class="rack-items" id="basketList"></div>
+          <p class="rack-empty" id="basketEmpty">洗衣籃是空的</p>
+        </div>
+        <div class="rack-card" id="card-rack" role="button" tabindex="0">
+          <div class="rack-card-head">
+            <span class="rack-icon" data-icon="rack"></span>
+            <p class="rack-title">暫存衣架</p>
+          </div>
+          <div class="rack-items" id="tempRackList"></div>
+          <p class="rack-empty" id="tempRackEmpty">還沒有衣物在暫存</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---- History ---- -->
+    <section class="view" id="view-history">
+      <div class="segment" id="historySegment">
+        <button class="segment-btn is-active" data-seg="calendar">月曆</button>
+        <button class="segment-btn" data-seg="rank">常穿排行</button>
+      </div>
+
+      <div class="seg-panel" id="panel-calendar">
+        <div class="cal-head">
+          <button class="cal-nav" id="calPrev" aria-label="上個月">‹</button>
+          <button class="cal-title" id="calTitle">—</button>
+          <button class="cal-nav" id="calNext" aria-label="下個月">›</button>
+          <button class="cal-jump-btn" id="calJumpBtn" aria-label="跳轉至指定日期"><span data-icon="jump"></span></button>
+        </div>
+        <div class="cal-weekdays">
+          <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+        </div>
+        <div class="cal-swipe-area" id="calSwipeArea">
+          <div class="cal-grid" id="calGrid"></div>
+        </div>
+
+        <p class="stats-heading">本月小統計</p>
+        <div class="cal-stats" id="calStats"></div>
+      </div>
+
+      <div class="seg-panel" id="panel-rank" hidden>
+        <div class="item-grid" id="rankList"></div>
+      </div>
+
+      <button class="fab" id="btnBackfill" aria-label="補登穿搭紀錄">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+      </button>
+    </section>
+
+    <!-- ---- Wardrobe ---- -->
+    <section class="view" id="view-wardrobe">
+      <div class="retired-banner" id="retiredBanner" hidden>
+        <span class="retired-banner-icon" data-icon="retired"></span>
+        <div><p class="retired-banner-title">典藏</p><p class="retired-banner-sub">已退役的單品會安靜收在這裡，不列入日常衣櫥。</p></div>
+      </div>
+      <div class="chip-row" id="categoryChips"></div>
+      <div class="sort-row">
+        <select class="sort-select" id="sortSelect">
+          <option value="recent">最近新增</option>
+          <option value="wearCount">穿著次數</option>
+          <option value="lastWorn">最近穿著</option>
+          <option value="name">名稱</option>
+        </select>
+        <div class="sort-row-right">
+          <button class="icon-only-btn" id="btnFilter" aria-label="篩選">
+            <span data-icon="filter"></span><span class="filter-badge" id="filterBadge" hidden></span>
+          </button>
+          <button class="icon-only-btn" id="btnSearch" aria-label="搜尋">
+            <span data-icon="search"></span>
+          </button>
+          <button class="select-mode-btn" id="btnSelectMode">選取</button>
+        </div>
+      </div>
+      <div class="search-row is-hidden" id="searchRow">
+        <input type="text" id="searchInput" placeholder="搜尋名稱、價格、日期…">
+        <button class="search-clear-btn" id="btnSearchClear">取消</button>
+      </div>
+      <p class="item-count" id="itemCount"></p>
+      <div class="item-grid" id="wardrobeGrid"></div>
+      <p class="empty-hint" id="wardrobeEmpty" hidden>衣櫥還是空的，點右下角加入第一件衣物吧</p>
+      <div class="is-hidden" id="deleteCategoryWrap" style="margin:16px 0 90px">
+        <button class="btn-secondary btn-danger" id="btnDeleteCategory" style="width:100%">刪除此分類</button>
+      </div>
+      <button class="fab" id="btnAddItem" aria-label="新增單品">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+      </button>
+      <div class="select-bar is-hidden" id="selectBar">
+        <p id="selectCount">已選 0 件</p>
+        <div class="select-bar-actions">
+          <button class="btn-secondary" id="btnSelectAll">全選</button>
+          <button class="btn-secondary" id="btnSelectRetire">移入典藏</button>
+          <button class="btn-secondary btn-danger" id="btnSelectDelete">刪除</button>
+          <button class="btn-secondary" id="btnSelectCancel">取消</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---- Inspiration / wishlist ---- -->
+    <section class="view" id="view-inspiration">
+      <div class="inspire-hero">
+        <div>
+          <p class="section-title">穿搭靈感</p>
+          <p class="section-intro">把想入手的單品先收進清單，慢慢整理你的下一套穿搭。</p>
+        </div>
+        <span class="inspire-hero-icon" data-icon="shopping"></span>
+      </div>
+      <div class="wishlist-head">
+        <div><p class="section-title">想買的單品</p><p class="section-intro">可加入圖片、標籤與參考網址。</p></div>
+        <button class="btn-secondary wishlist-add-btn" id="btnAddWishlist"><span data-icon="shopping"></span>新增</button>
+      </div>
+      <div class="wishlist-grid" id="wishlistGrid"></div>
+      <p class="empty-hint" id="wishlistEmpty" hidden>還沒有想買的單品，先記下一件吧。</p>
+    </section>
+
+    <!-- ---- More (consumables live here) ---- -->
+    <section class="view" id="view-more">
+      <p class="section-title">生活耗材</p>
+      <p class="section-intro">固定週期用品，到期會提醒你更換</p>
+      <div class="consumable-grid" id="consumableGrid"></div>
+    </section>
+
+  </main>
+
+  <!-- ===== Tab bar ===== -->
+  <nav class="tab-bar">
+    <button class="tab-btn is-active" data-view="home">
+      <span class="tab-icon" data-icon="home"></span><span>主頁</span>
+    </button>
+    <button class="tab-btn" data-view="history">
+      <span class="tab-icon" data-icon="history"></span><span>穿搭紀錄</span>
+    </button>
+    <button class="tab-btn" data-view="wardrobe">
+      <span class="tab-icon" data-icon="wardrobe"></span><span>衣櫥</span>
+    </button>
+    <button class="tab-btn" data-view="inspiration">
+      <span class="tab-icon" data-icon="inspire"></span><span>穿搭靈感</span>
+    </button>
+    <button class="tab-btn" data-view="more">
+      <span class="tab-icon" data-icon="more"></span><span>更多</span>
+    </button>
+  </nav>
+</div>
+
+<!-- ===== Modal: overlay root ===== -->
+<div class="modal-overlay" id="modalOverlay">
+
+  <!-- Try-on picker -->
+  <div class="modal-sheet" id="modal-tryon" data-modal>
+    <div class="modal-handle"></div>
+    <div class="modal-head"><h2 id="tryonTitle">選擇上衣</h2><button class="modal-close" data-close>✕</button></div>
+    <div class="chip-row chip-row-form is-hidden" id="tryonCategoryChips"></div>
+    <div class="sort-row">
+      <select class="sort-select" id="tryonSortSelect">
+        <option value="recent">最近新增</option>
+        <option value="wearCount">穿著次數</option>
+        <option value="lastWorn">最近穿著</option>
+        <option value="name">名稱</option>
+      </select>
+      <div class="sort-row-right">
+        <button class="icon-only-btn" id="btnTryonFilter" aria-label="篩選"><span data-icon="filter"></span><span class="filter-badge" id="tryonFilterBadge" hidden></span></button>
+        <button class="icon-only-btn" id="btnTryonSearch" aria-label="搜尋"><span data-icon="search"></span></button>
+      </div>
+    </div>
+    <div class="search-row is-hidden" id="tryonSearchRow">
+      <input type="text" id="tryonSearchInput" placeholder="搜尋名稱、價格、日期…">
+      <button class="search-clear-btn" id="btnTryonSearchClear">取消</button>
+    </div>
+    <div id="tryonClearWrap"></div>
+    <div class="picker-grid item-grid" id="tryonPickerGrid"></div>
+    <p class="empty-hint" id="tryonPickerEmpty" hidden>這個分類目前沒有乾淨的衣物</p>
+  </div>
+
+  <!-- Item detail -->
+  <div class="modal-sheet modal-sheet-tall" id="modal-item" data-modal>
+    <div class="modal-handle"></div>
+    <div class="item-detail-body" id="itemDetailBody"></div>
+  </div>
+
+  <!-- Add item -->
+  <div class="modal-sheet modal-sheet-tall" id="modal-add" data-modal>
+    <div class="modal-handle"></div>
+    <div class="modal-head"><h2 id="addModalTitle">新增單品</h2><button class="modal-close" data-close>✕</button></div>
+    <form class="form" id="addItemForm">
+      <label class="photo-upload" id="photoUploadArea">
+        <input type="file" accept="image/*" id="photoInput" multiple hidden>
+        <span class="photo-placeholder" id="photoPreviewWrap">
+          <span data-icon="camera"></span>
+          <span>上傳照片（可一次選2張，第2張當背面）</span>
+        </span>
+      </label>
+      <p class="photo-back-hint" id="photoBackHint" hidden>已加入背面照片 ✓</p>
+      <button type="button" class="link-more-btn is-hidden" id="btnReadjustPhoto">重新調整照片裁切／縮放</button>
+
+      <label class="field">名稱
+        <input type="text" id="fieldName" placeholder="例如：純白棉質短袖T恤" required>
+      </label>
+
+      <div class="field">分類
+        <div class="chip-row chip-row-form" id="categoryPickerChips"></div>
+      </div>
+
+      <div class="field is-hidden" id="lengthToggleWrap">長短
+        <div class="segment" id="lengthToggle">
+          <button type="button" class="segment-btn" data-len="長">長</button>
+          <button type="button" class="segment-btn" data-len="短">短</button>
+        </div>
+      </div>
+
+      <div class="field">標籤（可複選，會用在衣櫥的篩選器／搜尋）
+        <div class="chip-row chip-row-form" id="tagPickerChips"></div>
+        <input type="text" id="fieldTagsCustom" placeholder="輸入新標籤後按 Enter 加入">
+      </div>
+
+      <div class="field-row">
+        <label class="field">購買日期
+          <input type="date" id="fieldPurchaseDate">
+        </label>
+        <label class="field">價格
+          <input type="number" id="fieldPrice" placeholder="選填" min="0">
+        </label>
+      </div>
+
+      <label class="checkbox-row" id="archiveCheckboxRow">
+        <input type="checkbox" id="fieldArchiveDirect">
+        <span>直接加入典藏（不進入主要衣櫥／不列入洗滌計算）</span>
+      </label>
+
+      <button type="submit" class="btn-primary" id="addFormSubmitBtn">加入衣櫥</button>
+      <div class="settings-actions is-hidden" id="editExtraActions">
+        <button type="button" class="btn-secondary" id="btnRetireItem">退役 / 移入典藏</button>
+        <button type="button" class="btn-secondary btn-danger" id="btnDeleteItem">永久刪除</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Unsaved changes confirm -->
+  <div class="modal-sheet" id="modal-unsaved" data-modal>
+    <div class="modal-handle"></div>
+    <div class="modal-head"><h2>要儲存變更嗎？</h2></div>
+    <p class="section-intro" style="margin:0 0 16px">這個單品的內容還沒儲存。</p>
+    <div class="settings-actions">
+      <button class="btn-danger-solid" id="btnUnsavedDiscard">放棄</button>
+      <button class="btn-primary" id="btnUnsavedSave" style="margin-top:0">儲存</button>
+    </div>
+  </div>
+
+  <!-- Add custom category -->
+  <div class="modal-sheet" id="modal-category" data-modal>
+    <div class="modal-handle"></div>
+    <div class="modal-head"><h2>新增分類</h2><button class="modal-close" data-close>✕</button></div>
+    <form class="form" id="categoryForm">
+      <label class="field">分類名稱
+        <input type="text" id="fieldCategoryName" placeholder="例如：包包" required maxlength="8">
+      </label>
+      <button type="submit" class="btn-primary">新增</button>
+    </form>
+  </div>
+
+  <!-- Filter -->
+  <div class="modal-sheet" id="modal-filter" data-modal>
+    <div class="modal-handle"></div>
+    <div class="modal-head"><h2>篩選</h2><button class="modal-close" data-close>✕</button></div>
+    <div class="filter-section">
+      <p class="filter-label">狀態</p>
+      <div class="chip-row chip-row-form" id="filterStatusChips">
+        <button type="button" class="chip is-active" data-status="all">全部</button>
+        <button type="button" class="chip" data-status="clean">乾淨</button>
+        <button type="button" class="chip" data-status="resting">暫存</button>
+        <button type="button" class="chip" data-status="dirty">待洗</button>
+      </div>
+    </div>
+    <div class="filter-section">
+      <p class="filter-label">標籤（含長／短）</p>
+      <div class="chip-row chip-row-form" id="filterTagChips"></div>
+    </div>
+    <div class="settings-actions">
+      <button class="btn-secondary" id="btnFilterClear">清除篩選</button>
+      <button class="btn-primary" id="btnFilterApply">套用</button>
+    </div>
+  </div>
+
+  <!-- Notifications -->
+  <div class="modal-sheet" id="modal-notif" data-modal>
+    <div class="modal-handle"></div>
+    <div class="modal-head"><h2>提醒中心</h2><button class="modal-close" data-close>✕</button></div>
+    <div class="notif-list" id="notifList"></div>
+    <p class="empty-hint" id="notifEmpty" hidden>目前沒有需要處理的事項，太棒了</p>
+  </div>
+
+  <!-- Settings -->
+  <div class="modal-sheet" id="modal-settings" data-modal>
+    <div class="modal-handle"></div>
+    <div class="modal-head"><h2>設定</h2><button class="modal-close" data-close>✕</button></div>
+    <form class="form" id="settingsForm">
+      <label class="field">暱稱
+        <input type="text" id="settingName" placeholder="你的名字">
+      </label>
+
+      <div class="threshold-row">
+        <p class="field-label-standalone">褲子幾次該洗？</p>
+        <button type="button" class="threshold-picker-btn" id="pickThresholdBottom" data-cat="bottom">3</button>
+      </div>
+      <div class="threshold-row">
+        <p class="field-label-standalone">外套幾次該洗？</p>
+        <button type="button" class="threshold-picker-btn" id="pickThresholdOuter" data-cat="outer">5</button>
+      </div>
+      <div class="threshold-row">
+        <p class="field-label-standalone">浴巾幾天該洗？</p>
+        <button type="button" class="threshold-picker-btn" id="pickThresholdTowel" data-cat="towel">7</button>
+      </div>
+      <button type="button" class="link-more-btn" id="btnMoreThresholds">⋯ 展開其他分類（鞋子／帽子／配件）</button>
+      <div class="is-hidden" id="moreThresholdsWrap">
+        <div class="threshold-row">
+          <p class="field-label-standalone">鞋子幾次該洗？</p>
+          <button type="button" class="threshold-picker-btn" id="pickThresholdShoes" data-cat="shoes">8</button>
+        </div>
+        <div class="threshold-row">
+          <p class="field-label-standalone">帽子幾次該洗？</p>
+          <button type="button" class="threshold-picker-btn" id="pickThresholdHat" data-cat="hat">8</button>
+        </div>
+        <div class="threshold-row">
+          <p class="field-label-standalone">配件幾次該洗？</p>
+          <button type="button" class="threshold-picker-btn" id="pickThresholdAccessory" data-cat="accessory">8</button>
+        </div>
+      </div>
+
+      <button type="submit" class="btn-primary">儲存設定</button>
+    </form>
+    <div class="settings-footer">
+      <p class="settings-note">資料儲存在這台裝置的瀏覽器裡，換裝置或清除瀏覽器資料會遺失，建議定期匯出備份。</p>
+      <div class="settings-actions">
+        <button class="btn-secondary btn-with-icon" id="btnExportData"><span data-icon="download"></span>匯出備份</button>
+        <button class="btn-secondary" id="btnImportData">匯入備份</button>
+        <input type="file" accept="application/json" id="importFileInput" hidden>
+      </div>
+      <div class="settings-actions" style="margin-top:8px">
+        <button class="btn-secondary" id="btnImportSeedList">匯入我的舊衣物清單</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Number grid picker (reusable) -->
+  <div class="modal-sheet" id="modal-number-grid" data-modal>
+    <div class="modal-handle"></div>
+    <div class="modal-head"><h2 id="numberGridTitle">選擇次數</h2><button class="modal-close" data-close>✕</button></div>
+    <div class="number-grid" id="numberGrid"></div>
+    <p class="number-grid-caption is-hidden" id="numberGridCaption">太臭了！</p>
+  </div>
+
+  <!-- Photo adjust: crop/zoom/pan to the category's standard aspect ratio -->
+  <div class="modal-sheet" id="modal-photo-adjust" data-modal>
+    <div class="modal-handle"></div>
+    <div class="modal-head"><h2>調整照片</h2><button class="modal-close" data-close>✕</button></div>
+    <div class="photo-adjust-frame" id="photoAdjustFrame">
+      <img id="photoAdjustImg" draggable="false" alt="">
+    </div>
+    <p class="photo-adjust-hint">拖曳照片調整位置</p>
+    <label class="field">縮放
+      <input type="range" id="photoZoomSlider" min="100" max="250" value="100">
+    </label>
+    <button class="btn-primary" id="btnPhotoAdjustApply">套用</button>
+  </div>
+
+  <!-- Day detail (calendar) -->
+  <div class="modal-sheet modal-sheet-tall" id="modal-day" data-modal>
+    <div class="modal-handle"></div>
+    <div class="modal-head"><h2 id="dayDetailTitle">—</h2><button class="modal-close" data-close>✕</button></div>
+    <div class="day-detail-body" id="dayDetailBody"></div>
+  </div>
+
+  <!-- Jump to month/date -->
+  <div class="modal-sheet" id="modal-jump" data-modal>
+    <div class="modal-handle"></div>
+    <div class="modal-head"><h2>跳轉至指定日期</h2><button class="modal-close" data-close>✕</button></div>
+    <label class="field">選擇日期
+      <input type="date" id="jumpDateInput">
+    </label>
+    <button class="btn-primary" id="btnJumpGo">前往</button>
+  </div>
+
+  <!-- Backfill a past day's OOTD -->
+  <div class="modal-sheet modal-sheet-tall" id="modal-backfill" data-modal>
+    <div class="modal-handle"></div>
+    <div class="modal-head"><h2>補登穿搭紀錄</h2><button class="modal-close" data-close>✕</button></div>
+    <label class="field">日期
+      <input type="date" id="backfillDate">
+    </label>
+    <div class="day-detail-body" id="backfillRows" style="margin-top:12px"></div>
+    <button class="btn-primary" id="btnSaveBackfill" style="margin-top:14px">儲存這天的穿搭</button>
+  </div>
+
+  <!-- Consumable detail -->
+  <div class="modal-sheet" id="modal-consumable" data-modal>
+    <div class="modal-handle"></div>
+    <div class="consumable-detail-body" id="consumableDetailBody"></div>
+  </div>
+
+  <!-- Laundry day (whole-basket household laundry cadence) -->
+  <div class="modal-sheet" id="modal-laundry" data-modal>
+    <div class="modal-handle"></div>
+    <div class="modal-head"><h2>洗衣日資訊</h2><button class="modal-close" data-close>✕</button></div>
+    <div class="detail-stats" id="laundryStats"></div>
+    <div class="item-grid laundry-overview-grid" id="laundryOverviewGrid"></div>
+    <p class="empty-hint" id="laundryOverviewEmpty" hidden>洗衣籃目前是空的</p>
+    <div class="settings-actions">
+      <button class="btn-secondary" id="btnLaundryPostpone">延後一天洗</button>
+      <button class="btn-primary" id="btnLaundryDone" style="margin-top:0">洗好了</button>
+    </div>
+  </div>
+
+  <!-- Temp rack overview -->
+  <div class="modal-sheet modal-sheet-tall" id="modal-rack-overview" data-modal>
+    <div class="modal-handle"></div>
+    <div class="modal-head"><h2>暫存衣架</h2><button class="modal-close" data-close>✕</button></div>
+    <div class="item-grid" id="rackOverviewGrid"></div>
+    <p class="empty-hint" id="rackOverviewEmpty" hidden>還沒有衣物在暫存</p>
+  </div>
+
+  <!-- Wishlist item -->
+  <div class="modal-sheet modal-sheet-tall" id="modal-wishlist" data-modal>
+    <div class="modal-handle"></div>
+    <div class="modal-head"><h2 id="wishlistModalTitle">新增想買單品</h2><button class="modal-close" data-close>✕</button></div>
+    <form class="form" id="wishlistForm">
+      <label class="photo-upload">
+        <input type="file" accept="image/*" id="wishlistPhotoInput" hidden>
+        <span class="photo-placeholder" id="wishlistPhotoPreviewWrap"><span data-icon="camera"></span><span>加入參考圖片</span></span>
+      </label>
+      <button type="button" class="link-more-btn is-hidden" id="btnReadjustWishlistPhoto">重新調整照片裁切／縮放</button>
+      <label class="field">名稱<input type="text" id="wishlistName" placeholder="例如：米白色短版外套" required></label>
+      <div class="field">分類<div class="chip-row chip-row-form" id="wishlistCategoryChips"></div></div>
+      <div class="field is-hidden" id="wishlistLengthToggleWrap">長短<div class="segment" id="wishlistLengthToggle"><button type="button" class="segment-btn" data-len="長">長</button><button type="button" class="segment-btn" data-len="短">短</button></div></div>
+      <div class="field">標籤<div class="chip-row chip-row-form" id="wishlistTagPickerChips"></div><input type="text" id="wishlistTagsCustom" placeholder="輸入新標籤後按 Enter 加入"></div>
+      <label class="field">參考網址<input type="url" id="wishlistReferenceUrl" placeholder="https://…"></label>
+      <button type="submit" class="btn-primary" id="wishlistSubmitBtn">加入想買清單</button>
+      <button type="button" class="btn-secondary btn-danger is-hidden" id="btnDeleteWishlist">刪除這件想買單品</button>
+    </form>
+  </div>
+
+  <!-- Generic confirm (used by notification row taps) -->
+  <div class="modal-sheet" id="modal-confirm" data-modal>
+    <div class="modal-handle"></div>
+    <div class="modal-head"><h2 id="confirmTitle">確定嗎？</h2></div>
+    <p class="section-intro" id="confirmBody" style="margin:0 0 16px"></p>
+    <div class="settings-actions" id="confirmActions" style="flex-wrap:wrap"></div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="seed-items.js?v=20260823d"></script>
+<script src="app.js?v=20260823d"></script>
+</body>
+</html>
