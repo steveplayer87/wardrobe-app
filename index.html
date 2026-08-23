@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="衣櫥助手">
-<link rel="stylesheet" href="styles.css?v=20260823d">
+<link rel="stylesheet" href="styles.css?v=20260823g">
 </head>
 <body>
 
@@ -128,10 +128,6 @@
 
     <!-- ---- Wardrobe ---- -->
     <section class="view" id="view-wardrobe">
-      <div class="retired-banner" id="retiredBanner" hidden>
-        <span class="retired-banner-icon" data-icon="retired"></span>
-        <div><p class="retired-banner-title">典藏</p><p class="retired-banner-sub">已退役的單品會安靜收在這裡，不列入日常衣櫥。</p></div>
-      </div>
       <div class="chip-row" id="categoryChips"></div>
       <div class="sort-row">
         <select class="sort-select" id="sortSelect">
@@ -156,6 +152,10 @@
       </div>
       <p class="item-count" id="itemCount"></p>
       <div class="item-grid" id="wardrobeGrid"></div>
+      <div class="retired-banner" id="retiredBanner" hidden>
+        <span class="retired-banner-icon" data-icon="retired"></span>
+        <div><p class="retired-banner-title">典藏</p><p class="retired-banner-sub">已退役的單品會安靜收在這裡，不列入日常衣櫥。</p></div>
+      </div>
       <p class="empty-hint" id="wardrobeEmpty" hidden>衣櫥還是空的，點右下角加入第一件衣物吧</p>
       <div class="is-hidden" id="deleteCategoryWrap" style="margin:16px 0 90px">
         <button class="btn-secondary btn-danger" id="btnDeleteCategory" style="width:100%">刪除此分類</button>
@@ -433,9 +433,9 @@
     <div class="photo-adjust-frame" id="photoAdjustFrame">
       <img id="photoAdjustImg" draggable="false" alt="">
     </div>
-    <p class="photo-adjust-hint">拖曳照片調整位置</p>
+    <p class="photo-adjust-hint">拖曳移動；雙指或滑桿可放大／縮小</p>
     <label class="field">縮放
-      <input type="range" id="photoZoomSlider" min="100" max="250" value="100">
+      <input type="range" id="photoZoomSlider" min="50" max="250" value="100">
     </label>
     <button class="btn-primary" id="btnPhotoAdjustApply">套用</button>
   </div>
@@ -527,7 +527,7 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="seed-items.js?v=20260823d"></script>
-<script src="app.js?v=20260823d"></script>
+<script src="seed-items.js?v=20260823g"></script>
+<script src="app.js?v=20260823g"></script>
 </body>
 </html>

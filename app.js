@@ -65,6 +65,14 @@ const CONSUMABLE_DEFS = [
   { id: 'razor', name: '刮鬍刀片', cycleDays: 120, icon: 'razor' },
 ];
 const LENGTH_TAGS = ['長', '短'];
+const CONSUMABLE_IMAGES = {
+  towelA: 'assets/c-towel.jpg',
+  towelB: 'assets/c-towel.jpg',
+  sheets: 'assets/c-sheets.jpg',
+  toothbrush: 'assets/c-toothbrush.jpg',
+  razor: 'assets/c-razor.jpg',
+};
+function consumableImage(c) { return c.image || CONSUMABLE_IMAGES[c.id] || ''; }
 
 /* ---------------------------- Category helpers ---------------------------- */
 function allCategoryIds() { return FIXED_CATEGORIES.concat(state.customCategories.map(c => c.id)); }
@@ -158,12 +166,13 @@ function openPhotoAdjust(imgSrc, category, onApply) {
   if (sourceSheet && sourceSheet !== 'modal-photo-adjust') modalReturnTo = sourceSheet;
   const ratio = getCategoryAspectRatio(category); // width / height
   const frame = document.getElementById('photoAdjustFrame');
-  const frameW = 240;
+  const frameW = Math.min(280, Math.max(220, (frame.parentElement?.clientWidth || 320) - 12));
   const frameH = Math.round(frameW / ratio);
   frame.style.width = frameW + 'px';
   frame.style.height = frameH + 'px';
+  frame.style.backgroundColor = '#fff';
   const img = document.getElementById('photoAdjustImg');
-  photoAdjust = { scale: 1, x: 0, y: 0, frameW, frameH, isPng: imgSrc.startsWith('data:image/png'), onApply };
+  photoAdjust = { scale: 1, x: 0, y: 0, frameW, frameH, minScale: 0.5, maxScale: 2.5, isPng: imgSrc.startsWith('data:image/png'), onApply };
   img.onload = () => {
     const iw = img.naturalWidth, ih = img.naturalHeight;
     photoAdjust.iw = iw; photoAdjust.ih = ih;
@@ -173,60 +182,122 @@ function openPhotoAdjust(imgSrc, category, onApply) {
     applyPhotoAdjustTransform();
   };
   img.src = imgSrc;
-  document.getElementById('photoZoomSlider').value = 100;
+  const slider = document.getElementById('photoZoomSlider');
+  slider.min = 50;
+  slider.max = 250;
+  slider.value = 100;
   openModal('modal-photo-adjust');
+}
+function clampPhotoPosition(s) {
+  const totalScale = s.baseScale * s.scale;
+  const w = s.iw * totalScale, h = s.ih * totalScale;
+  const centeredX = (s.frameW - w) / 2;
+  const centeredY = (s.frameH - h) / 2;
+  const minX = w >= s.frameW ? s.frameW - w : centeredX;
+  const maxX = w >= s.frameW ? 0 : centeredX;
+  const minY = h >= s.frameH ? s.frameH - h : centeredY;
+  const maxY = h >= s.frameH ? 0 : centeredY;
+  s.x = Math.min(maxX, Math.max(minX, s.x));
+  s.y = Math.min(maxY, Math.max(minY, s.y));
 }
 function applyPhotoAdjustTransform() {
   const s = photoAdjust;
-  if (!s) return;
+  if (!s || !s.iw) return;
   const img = document.getElementById('photoAdjustImg');
   const totalScale = s.baseScale * s.scale;
   const w = s.iw * totalScale, h = s.ih * totalScale;
-  const minX = s.frameW - w, minY = s.frameH - h;
-  s.x = Math.min(0, Math.max(minX, s.x));
-  s.y = Math.min(0, Math.max(minY, s.y));
+  clampPhotoPosition(s);
   img.style.width = w + 'px';
   img.style.height = h + 'px';
-  img.style.transform = `translate(${s.x}px, ${s.y}px)`;
+  img.style.transform = `translate3d(${s.x}px, ${s.y}px, 0)`;
+}
+function setPhotoScale(nextScale, focusX, focusY) {
+  const s = photoAdjust;
+  if (!s || !s.iw) return;
+  const oldTotal = s.baseScale * s.scale;
+  const fx = focusX ?? s.frameW / 2;
+  const fy = focusY ?? s.frameH / 2;
+  const contentX = (fx - s.x) / oldTotal;
+  const contentY = (fy - s.y) / oldTotal;
+  s.scale = Math.min(s.maxScale, Math.max(s.minScale, nextScale));
+  const newTotal = s.baseScale * s.scale;
+  s.x = fx - contentX * newTotal;
+  s.y = fy - contentY * newTotal;
+  applyPhotoAdjustTransform();
+  document.getElementById('photoZoomSlider').value = Math.round(s.scale * 100);
 }
 function wirePhotoAdjust() {
   const frame = document.getElementById('photoAdjustFrame');
+  const pointers = new Map();
   let dragStart = null;
+  let pinchStart = null;
+  const pointFromEvent = e => { const rect = frame.getBoundingClientRect(); return { x: e.clientX - rect.left, y: e.clientY - rect.top }; };
+  const distance = () => {
+    const [a, b] = [...pointers.values()];
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  };
+  const midpoint = () => {
+    const [a, b] = [...pointers.values()];
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  };
   frame.addEventListener('pointerdown', e => {
     if (!photoAdjust) return;
-    dragStart = { x: e.clientX, y: e.clientY, ox: photoAdjust.x, oy: photoAdjust.y };
+    pointers.set(e.pointerId, pointFromEvent(e));
     frame.setPointerCapture(e.pointerId);
+    if (pointers.size === 1) dragStart = { x: e.clientX, y: e.clientY, ox: photoAdjust.x, oy: photoAdjust.y };
+    if (pointers.size === 2) pinchStart = { distance: distance(), scale: photoAdjust.scale, midpoint: midpoint() };
   });
   frame.addEventListener('pointermove', e => {
-    if (!dragStart || !photoAdjust) return;
-    photoAdjust.x = dragStart.ox + (e.clientX - dragStart.x);
-    photoAdjust.y = dragStart.oy + (e.clientY - dragStart.y);
-    applyPhotoAdjustTransform();
+    if (!photoAdjust || !pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, pointFromEvent(e));
+    if (pointers.size >= 2 && pinchStart) {
+      const ratio = distance() / Math.max(1, pinchStart.distance);
+      const point = midpoint();
+      setPhotoScale(pinchStart.scale * ratio, point.x, point.y);
+      return;
+    }
+    if (pointers.size === 1 && dragStart) {
+      photoAdjust.x = dragStart.ox + (e.clientX - dragStart.x);
+      photoAdjust.y = dragStart.oy + (e.clientY - dragStart.y);
+      applyPhotoAdjustTransform();
+    }
   });
-  const endDrag = () => { dragStart = null; };
-  frame.addEventListener('pointerup', endDrag);
-  frame.addEventListener('pointercancel', endDrag);
+  const endPointer = e => {
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinchStart = null;
+    if (pointers.size === 0) dragStart = null;
+  };
+  frame.addEventListener('pointerup', endPointer);
+  frame.addEventListener('pointercancel', endPointer);
+  frame.addEventListener('pointerleave', e => { if (e.buttons === 0) endPointer(e); });
   document.getElementById('photoZoomSlider').addEventListener('input', e => {
     if (!photoAdjust) return;
-    photoAdjust.scale = Number(e.target.value) / 100;
-    applyPhotoAdjustTransform();
+    setPhotoScale(Number(e.target.value) / 100);
   });
   document.getElementById('btnPhotoAdjustApply').addEventListener('click', () => {
     const s = photoAdjust;
-    if (!s) { closeModal(); return; }
+    if (!s || !s.iw) { toast('照片還沒載入完成，請稍候再按套用'); return; }
     const outW = 640, outH = Math.round(outW / (s.frameW / s.frameH));
     const scaleOut = outW / s.frameW;
     const totalScale = s.baseScale * s.scale;
     const canvas = document.createElement('canvas');
     canvas.width = outW; canvas.height = outH;
     const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, outW, outH);
     const img = document.getElementById('photoAdjustImg');
     ctx.drawImage(img, s.x * scaleOut, s.y * scaleOut, s.iw * totalScale * scaleOut, s.ih * totalScale * scaleOut);
-    const dataUrl = canvas.toDataURL(s.isPng ? 'image/png' : 'image/jpeg', 0.85);
+    let dataUrl;
+    try {
+      dataUrl = s.isPng ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', 0.86);
+    } catch (err) {
+      toast('照片儲存失敗，請重新選取照片');
+      return;
+    }
     const cb = s.onApply;
     photoAdjust = null;
     if (cb) cb(dataUrl);
-    closeModal();
+    requestAnimationFrame(() => closeModal());
   });
 }
 
@@ -369,11 +440,22 @@ function setTodaySlot(slot, itemId) {
   renderHome();
   renderWardrobe();
 }
+function recordLaundryEvent(date = todayStr()) {
+  state.laundry = state.laundry || { lastWashDate: date, cycleDays: 2, snoozedUntil: null, history: [] };
+  state.laundry.history = Array.isArray(state.laundry.history) ? state.laundry.history : [];
+  if (!state.laundry.history.some(entry => (typeof entry === 'string' ? entry : entry?.date) === date)) {
+    state.laundry.history.unshift(date);
+  }
+}
+function laundryHistoryDates() {
+  return new Set((state.laundry?.history || []).map(entry => typeof entry === 'string' ? entry : entry?.date).filter(Boolean));
+}
 function recordItemWash(item) {
   if (!item) return;
   const date = todayStr();
   item.washHistory = item.washHistory || [];
   item.washHistory.unshift({ date, basketAt: item.basketAt || null });
+  recordLaundryEvent(date);
   item.lastWashedDate = date;
   item.wearCount = 0;
   item.status = 'clean';
@@ -505,8 +587,7 @@ function markLaundryDone() {
   state.items.filter(item => item.status === 'dirty').forEach(recordItemWash);
   state.laundry.lastWashDate = todayStr();
   state.laundry.snoozedUntil = null;
-  state.laundry.history = state.laundry.history || [];
-  if (!state.laundry.history.includes(todayStr())) state.laundry.history.unshift(todayStr());
+  recordLaundryEvent(todayStr());
   saveState();
   renderAll();
   toast('已記錄洗衣日，洗衣籃內容也已更新');
@@ -561,7 +642,10 @@ function renderHeader() {
 }
 
 function itemPhotoStyle(item) {
-  return item.image ? `background-image:url('${item.image}')` : '';
+  return item.image ? `background-color:#fff;background-image:url('${item.image}');background-repeat:no-repeat;background-position:center;background-size:cover` : 'background-color:#fff';
+}
+function calendarPhotoStyle(item) {
+  return item.image ? `background-color:#fff;background-image:url('${item.image}');background-repeat:no-repeat;background-position:center bottom;background-size:contain` : 'background-color:#fff';
 }
 function thumbInner(item) {
   return item.image ? '' : (categoryIcon(item.category) || '');
@@ -801,7 +885,8 @@ function renderHistory() {
   const byDate = {};
   entries.forEach(e => { if (e.date) (byDate[e.date] = byDate[e.date] || []).push(e); });
   const today = todayStr();
-  const laundryDays = new Set(state.laundry.history || []);
+  const laundryDays = laundryHistoryDates();
+  if (state.laundry?.lastWashDate) laundryDays.add(state.laundry.lastWashDate);
   const towelDays = new Set(
     state.consumables.filter(c => isTowelId(c.id)).flatMap(c => (c.history || []).map(h => h.date))
   );
@@ -822,9 +907,12 @@ function renderHistory() {
     if (dayEntries && dayEntries.length) {
       cell.classList.add('has-ootd');
       const entry = dayEntries[0];
-      const thumbItems = ['top', 'bottom'].map(s => entry[s] ? findItem(entry[s]) : null).filter(Boolean);
-      thumbsHtml = `<span class="cal-thumbs">${thumbItems.map(it =>
-        `<span class="cal-thumb" style="${itemPhotoStyle(it)}">${it.image ? '' : categoryIcon(it.category)}</span>`
+      const thumbItems = [
+        { item: entry.top ? findItem(entry.top) : null, className: 'cal-thumb-top' },
+        { item: entry.bottom ? findItem(entry.bottom) : null, className: 'cal-thumb-bottom' },
+      ].filter(({ item }) => item);
+      thumbsHtml = `<span class="cal-thumbs">${thumbItems.map(({ item, className }) =>
+        `<span class="cal-thumb ${className}" style="${calendarPhotoStyle(item)}">${item.image ? '' : categoryIcon(item.category)}</span>`
       ).join('')}</span>`;
     }
     let dotsHtml = '';
@@ -946,7 +1034,7 @@ function renderConsumables() {
     card.className = 'consumable-card' + (overdue ? ' is-overdue' : '') + (towel && !isActive ? ' is-standby' : '');
     const daysHtml = (towel && !isActive) ? `<p class="c-days">備用中</p>` : `<p class="c-days">已用了 <b>${used}</b> 天</p>`;
     card.innerHTML = `
-      <span class="c-icon">${ICONS[c.icon]||''}</span>
+      <span class="c-icon">${consumableImage(c) ? `<img src="${consumableImage(c)}" alt="">` : (ICONS[c.icon]||'')}</span>
       <p class="c-name">${escapeHtml(c.name)}</p>
       ${daysHtml}
       <p class="c-cycle">週期 ${c.cycleDays === null ? '無限制' : c.cycleDays + ' 天'}</p>
@@ -1126,6 +1214,7 @@ function renderWishlistCategoryChips() {
     chip.textContent = categoryLabel(id);
     chip.addEventListener('click', () => {
       pendingWishlistCategory = id;
+      wishlistDirty = true;
       renderWishlistCategoryChips();
       document.getElementById('wishlistLengthToggleWrap').classList.toggle('is-hidden', !(id === 'top' || id === 'bottom'));
       autoSaveWishlistDraft();
@@ -1147,6 +1236,7 @@ function renderWishlistTagChips() {
     chip.textContent = tag;
     chip.addEventListener('click', () => {
       pendingWishlistTags = pendingWishlistTags.includes(tag) ? pendingWishlistTags.filter(x => x !== tag) : pendingWishlistTags.concat(tag);
+      wishlistDirty = true;
       renderWishlistTagChips();
       renderWishlistLengthToggle();
       autoSaveWishlistDraft();
@@ -1173,6 +1263,8 @@ function autoSaveWishlistDraft() {
 }
 function openWishlistModal(editId = null) {
   editingWishlistId = editId;
+  wishlistDirty = false;
+  wishlistEditSnapshot = null;
   pendingWishlistPhoto = null;
   pendingWishlistCategory = 'top';
   pendingWishlistTags = [];
@@ -1180,6 +1272,7 @@ function openWishlistModal(editId = null) {
   form.reset();
   const savedDraft = !editId && state.drafts && state.drafts.wishlist;
   const item = editId ? state.wishlist.find(x => x.id === editId) : null;
+  wishlistEditSnapshot = item ? JSON.parse(JSON.stringify(item)) : null;
   const source = item || savedDraft;
   if (source) {
     pendingWishlistCategory = source.category || 'top';
@@ -1201,7 +1294,7 @@ function openWishlistModal(editId = null) {
 }
 function saveWishlistForm() {
   const name = document.getElementById('wishlistName').value.trim();
-  if (!name) { toast('請輸入想買單品名稱'); return; }
+  if (!name) { toast('請輸入想買單品名稱'); return false; }
   const data = {
     name,
     category: pendingWishlistCategory,
@@ -1218,9 +1311,11 @@ function saveWishlistForm() {
     toast('已加入想買清單');
   }
   state.drafts.wishlist = null;
+  wishlistDirty = false;
   saveState();
   renderWishlist();
   forceCloseModal({ skipPersist: true });
+  return true;
 }
 
 /* ============================================================
@@ -1303,6 +1398,9 @@ let editingWishlistId = null;
 let pendingWishlistPhoto = null;
 let pendingWishlistCategory = 'top';
 let pendingWishlistTags = [];
+let wishlistDirty = false;
+let wishlistEditSnapshot = null;
+let unsavedContext = null;
 
 function setPhotoPreview(wrap, src, emptyLabel) {
   if (src) {
@@ -1519,9 +1617,24 @@ function forceCloseModal(options = {}) {
   }
   backfillDraft = null;
   formDirty = false;
+  wishlistDirty = false;
+  wishlistEditSnapshot = null;
+  unsavedContext = null;
   modalReturnTo = null;
 }
+function openUnsavedPrompt(context) {
+  unsavedContext = context;
+  const isWishlist = context === 'wishlist';
+  document.querySelector('#modal-unsaved h2').textContent = isWishlist ? '要儲存這件想買單品嗎？' : '要儲存變更嗎？';
+  document.querySelector('#modal-unsaved .section-intro').textContent = isWishlist ? '這件想買單品的內容還沒儲存。' : '這個單品的內容還沒儲存。';
+  document.getElementById('btnUnsavedDiscard').textContent = '放棄';
+  document.getElementById('btnUnsavedSave').textContent = isWishlist ? '儲存到想買清單' : '儲存';
+  openModal('modal-unsaved');
+}
 function closeModal() {
+  const activeBeforePersist = document.querySelector('.modal-sheet.is-active');
+  if (activeBeforePersist?.id === 'modal-add' && formDirty) { openUnsavedPrompt('item'); return; }
+  if (activeBeforePersist?.id === 'modal-wishlist' && wishlistDirty) { openUnsavedPrompt('wishlist'); return; }
   persistTransientForms();
   // if we're picking an item for a backfill draft, closing the picker (X / backdrop /
   // swipe) should return to the backfill sheet rather than abandon the whole draft.
@@ -2065,6 +2178,7 @@ function wireEvents() {
     const value = btn.dataset.len;
     pendingWishlistTags = pendingWishlistTags.filter(tag => !LENGTH_TAGS.includes(tag));
     if (!pendingWishlistTags.includes(value)) pendingWishlistTags.push(value);
+    wishlistDirty = true;
     renderWishlistTagChips();
     renderWishlistLengthToggle();
     autoSaveWishlistDraft();
@@ -2075,14 +2189,15 @@ function wireEvents() {
     const value = e.target.value.trim();
     if (!value) return;
     if (!pendingWishlistTags.includes(value)) pendingWishlistTags.push(value);
+    wishlistDirty = true;
     e.target.value = '';
     renderWishlistTagChips();
     autoSaveWishlistDraft();
   });
   ['wishlistName', 'wishlistReferenceUrl'].forEach(id => {
     const el = document.getElementById(id);
-    el.addEventListener('input', autoSaveWishlistDraft);
-    el.addEventListener('change', autoSaveWishlistDraft);
+    el.addEventListener('input', () => { wishlistDirty = true; autoSaveWishlistDraft(); });
+    el.addEventListener('change', () => { wishlistDirty = true; autoSaveWishlistDraft(); });
   });
   document.getElementById('wishlistPhotoInput').addEventListener('change', async e => {
     const file = e.target.files?.[0];
@@ -2091,9 +2206,11 @@ function wireEvents() {
     try {
       const compressed = await compressImageFile(file);
       pendingWishlistPhoto = compressed;
+      wishlistDirty = true;
       autoSaveWishlistDraft();
       openPhotoAdjust(compressed, pendingWishlistCategory, finalUrl => {
         pendingWishlistPhoto = finalUrl;
+        wishlistDirty = true;
         setPhotoPreview(document.getElementById('wishlistPhotoPreviewWrap'), finalUrl, '加入參考圖片');
         document.getElementById('btnReadjustWishlistPhoto').classList.remove('is-hidden');
         autoSaveWishlistDraft();
@@ -2105,6 +2222,7 @@ function wireEvents() {
     if (!pendingWishlistPhoto) return;
     openPhotoAdjust(pendingWishlistPhoto, pendingWishlistCategory, finalUrl => {
       pendingWishlistPhoto = finalUrl;
+      wishlistDirty = true;
       setPhotoPreview(document.getElementById('wishlistPhotoPreviewWrap'), finalUrl, '加入參考圖片');
       autoSaveWishlistDraft();
     });
@@ -2283,8 +2401,28 @@ function wireEvents() {
     e.preventDefault();
     saveItemForm();
   });
-  document.getElementById('btnUnsavedDiscard').addEventListener('click', () => { state.drafts.addItem = null; forceCloseModal(); });
-  document.getElementById('btnUnsavedSave').addEventListener('click', saveItemForm);
+  document.getElementById('btnUnsavedDiscard').addEventListener('click', () => {
+    if (unsavedContext === 'wishlist') {
+      if (editingWishlistId && wishlistEditSnapshot) {
+        const item = state.wishlist.find(x => x.id === editingWishlistId);
+        if (item) Object.assign(item, JSON.parse(JSON.stringify(wishlistEditSnapshot)));
+      } else {
+        state.drafts.wishlist = null;
+      }
+    } else state.drafts.addItem = null;
+    saveState();
+    unsavedContext = null;
+    forceCloseModal({ skipPersist: true });
+  });
+  document.getElementById('btnUnsavedSave').addEventListener('click', () => {
+    const context = unsavedContext;
+    unsavedContext = null;
+    const saved = context === 'wishlist' ? saveWishlistForm() : saveItemForm();
+    if (saved === false) {
+      if (context === 'wishlist') openModal('modal-wishlist');
+      else openModal('modal-add');
+    }
+  });
 
   document.getElementById('btnRetireItem').addEventListener('click', () => {
     if (editingItemId) { formDirty = false; retireItem(editingItemId); closeModal(); }

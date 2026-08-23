@@ -571,3 +571,63 @@ img.notif-thumb { padding: 0; background-color: transparent; }
   .wishlist-grid { gap: 8px; }
   .wishlist-card-body { padding: 8px; }
 }
+
+
+/* =========================== Round 2 mobile/image fixes =========================== */
+.item-photo, .figure-thumb, .detail-photo, .photo-placeholder, .wishlist-photo,
+.cal-thumb, .day-detail-row .ddr-thumb, .notif-thumb, .rack-chip .rack-chip-thumb {
+  background-color: #fff;
+}
+.figure-slot.has-photo .figure-thumb, .photo-placeholder.has-photo { background-color: #fff; }
+.detail-photo { background-color: #fff; background-repeat: no-repeat; background-size: contain; }
+.cal-thumb { background-repeat: no-repeat; background-size: contain; }
+.cal-thumbs { gap: 0; width: 78%; align-items: center; }
+.cal-thumb-top { aspect-ratio: 1.45; }
+.cal-thumb-bottom { aspect-ratio: .86; }
+.cal-dot-laundry { background: var(--color-denim); }
+.cal-dot-towel { background: var(--color-sage); }
+.tab-btn.is-active::after { bottom: -3px; }
+
+/* Make the figure compact enough for the shoes and rack heads to remain in the first viewport. */
+.scene-sky { height: 64px; }
+.figure-board { width: min(136px, 40%); gap: 3px; }
+.figure-core { gap: 0; }
+.figure-thumb { padding: 12%; }
+.rack-card { min-height: 68px; }
+.rack-card-head { margin-bottom: 4px; }
+.rack-items { max-height: 45px; overflow: hidden; }
+
+/* Archived items are secondary and stay after the item grid. */
+.retired-banner { margin: 14px 0 12px; padding: 11px 13px; background: linear-gradient(135deg, #FFF0B8 0%, #F5D58B 100%); }
+#view-wardrobe.is-retired-view { background: linear-gradient(180deg, #FFF0B8 0%, #FFF8E9 56%, var(--color-bg) 100%); }
+#view-wardrobe.is-retired-view .item-card { background: #FFFDF5; border-color: #E6C979; }
+#view-wardrobe.is-retired-view .item-status-dot { background: #A8781B; }
+
+/* Wishlist cards: only slightly larger than a wardrobe card, not double-wide. */
+.wishlist-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.wishlist-card { border-radius: 18px; }
+.wishlist-photo { aspect-ratio: 1 / 1.05; background-size: contain; background-repeat: no-repeat; }
+.wishlist-card-body { padding: 8px; }
+.wishlist-name { font-size: 12px; }
+.wishlist-category { font-size: 10px; }
+.wishlist-tags { gap: 3px; margin-top: 5px; }
+.wishlist-tag { padding: 2px 5px; font-size: 8.5px; }
+.wishlist-card-actions { margin-top: 7px; }
+.wishlist-card-actions button, .wishlist-card-actions a { padding: 6px 3px; font-size: 9px; }
+
+/* Compact 3D consumable cards. */
+.consumable-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.consumable-card { border-radius: 18px; padding: 8px 8px 9px; }
+.consumable-card .c-icon { display: block; width: 100%; height: 64px; margin: -1px 0 5px; color: var(--color-denim); }
+.consumable-card .c-icon img { display: block; width: 100%; height: 100%; object-fit: contain; border-radius: 12px; background: #fff; }
+.c-name { font-size: 11px; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.c-days { font-size: 10px; }
+.c-days b { font-size: 15px; }
+.c-cycle { font-size: 9px; margin-top: 2px; }
+.c-flag, .c-standby-flag { top: 6px; right: 6px; font-size: 8px; padding: 2px 5px; }
+
+@media (max-width: 380px) {
+  .figure-board { width: min(128px, 38%); }
+  .scene-sky { height: 58px; }
+  .consumable-card .c-icon { height: 58px; }
+}
