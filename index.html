@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="衣櫥助手">
-<link rel="stylesheet" href="styles.css?v=20260824e">
+<link rel="stylesheet" href="styles.css?v=20260825a">
 </head>
 <body>
 
@@ -46,6 +46,12 @@
     <section class="view is-active" id="view-home">
       <div class="scene-card">
         <div class="scene-sky" id="sceneSky">
+          <span class="scene-weather-art" aria-hidden="true">
+            <span class="scene-art-sun"></span>
+            <span class="scene-art-moon"></span>
+            <span class="scene-art-cloud"></span>
+            <span class="scene-art-rain"></span>
+          </span>
           <span class="scene-orb" id="sceneOrb"></span>
           <span class="scene-star s1"></span><span class="scene-star s2"></span><span class="scene-star s3"></span>
           <span class="scene-weather" id="sceneWeather">設定城市後顯示天氣</span>
@@ -78,6 +84,7 @@
           <div class="rack-card-head">
             <span class="rack-icon" data-icon="basket"></span>
             <p class="rack-title" id="basketTitle">洗衣籃</p>
+            <span class="rack-card-status" id="basketCardStatus"></span>
           </div>
           <div class="rack-items" id="basketList"></div>
           <p class="rack-empty" id="basketEmpty">洗衣籃是空的</p>
@@ -445,6 +452,11 @@
         <p class="settings-helper">只調整圖片在卡片白色框內的佔比，不會改動原始照片。</p>
       </div>
 
+      <div class="settings-section outfit-layout-settings">
+        <div class="settings-label-row"><p class="field-label-standalone">今日穿搭版面</p><span class="settings-helper">大小與位置</span></div>
+        <button type="button" class="btn-secondary settings-wide-btn" id="btnOpenOutfitEditor"><span data-icon="edit"></span>編輯今日穿搭</button>
+      </div>
+
       <div class="settings-section weather-settings">
         <p class="field-label-standalone">景觀窗天氣城市</p>
         <div class="weather-search-row">
@@ -504,6 +516,26 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- Today outfit layout editor -->
+  <div class="modal-sheet modal-sheet-tall" id="modal-outfit-editor" data-modal>
+    <div class="modal-handle"></div>
+    <div class="modal-head"><h2>編輯今日穿搭</h2><button class="modal-close" data-close>✕</button></div>
+    <p class="section-intro outfit-editor-hint">先選擇物件，再用滑桿調整大小；直接拖曳預覽中的物件可以調整位置。</p>
+    <div class="outfit-editor-stage" id="outfitEditorStage"></div>
+    <div class="outfit-editor-controls">
+      <div class="outfit-editor-slot-tabs" id="outfitEditorSlotTabs"></div>
+      <div class="outfit-editor-control-card">
+        <div class="settings-label-row"><label for="outfitScaleSlider">物件大小</label><output id="outfitScaleValue">100%</output></div>
+        <input type="range" id="outfitScaleSlider" min="70" max="130" value="100">
+        <div class="outfit-position-row">
+          <span>位置</span><output id="outfitPositionValue">中央</output>
+          <button type="button" class="btn-secondary outfit-reset-btn" id="btnResetOutfitPosition">重設位置</button>
+        </div>
+      </div>
+    </div>
+    <button type="button" class="btn-primary" id="btnCloseOutfitEditor">完成</button>
   </div>
 
   <!-- Number grid picker (reusable) -->
@@ -568,6 +600,7 @@
     <div class="modal-head"><h2>洗衣日資訊</h2><button class="modal-close" data-close>✕</button></div>
     <div class="detail-stats" id="laundryStats"></div>
     <div class="item-grid laundry-overview-grid" id="laundryOverviewGrid"></div>
+    <div class="laundry-consumable-list" id="laundryConsumableGrid"></div>
     <p class="empty-hint" id="laundryOverviewEmpty" hidden>洗衣籃目前是空的</p>
     <div class="settings-actions">
       <button class="btn-secondary" id="btnLaundryPostpone">延後一天洗</button>
@@ -640,7 +673,7 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="seed-items.js?v=20260824e"></script>
-<script src="app.js?v=20260824e"></script>
+<script src="seed-items.js?v=20260825a"></script>
+<script src="app.js?v=20260825a"></script>
 </body>
 </html>

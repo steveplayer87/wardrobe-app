@@ -64,6 +64,24 @@ const MAIN_SLOTS = ['top', 'bottom', 'shoes'];
 const EXTRA_SLOTS = ['outer', 'hat', 'accessory'];
 const ALL_SLOTS = MAIN_SLOTS.concat(EXTRA_SLOTS);
 const HOME_SLOT_RATIOS = { hat: 2.2, top: 1.08, bottom: 0.72, shoes: 2.2 };
+const OUTFIT_LAYOUT_DEFAULTS = {
+  hat: { scale: 92, x: 0, y: 0 },
+  top: { scale: 100, x: 0, y: 0 },
+  bottom: { scale: 100, x: 0, y: 0 },
+  shoes: { scale: 92, x: 0, y: 0 },
+};
+function normalizeOutfitLayout(layout) {
+  const result = {};
+  Object.keys(OUTFIT_LAYOUT_DEFAULTS).forEach(slot => {
+    const raw = layout?.[slot] || {};
+    result[slot] = {
+      scale: Math.min(130, Math.max(70, Number(raw.scale) || OUTFIT_LAYOUT_DEFAULTS[slot].scale)),
+      x: Math.min(28, Math.max(-28, Number(raw.x) || 0)),
+      y: Math.min(28, Math.max(-28, Number(raw.y) || 0)),
+    };
+  });
+  return result;
+}
 const CONSUMABLE_DEFS = [
   { id: 'towelA', name: '浴巾 A', cycleDays: 7, icon: 'towel' },
   { id: 'towelB', name: '浴巾 B', cycleDays: 7, icon: 'towel' },
@@ -310,6 +328,7 @@ function defaultState() {
       avatar: '',
       cardImageScale: 72,
       weather: { city: '', latitude: null, longitude: null, timezone: 'auto', current: null, updatedAt: 0 },
+      outfitLayout: normalizeOutfitLayout(OUTFIT_LAYOUT_DEFAULTS),
       washThresholds: { bottom: 3, outer: 5, shoes: 8, hat: 8, accessory: 8 },
       categoryAspect: { top: '1:1', bottom: '3:4', outer: '1:1', shoes: '1:1', hat: '1:1', accessory: '1:1' },
     },
@@ -338,6 +357,7 @@ function loadState() {
     profile.washThresholds = Object.assign({}, base.profile.washThresholds, (parsed.profile && parsed.profile.washThresholds) || {});
     profile.categoryAspect = Object.assign({}, base.profile.categoryAspect, (parsed.profile && parsed.profile.categoryAspect) || {});
     profile.weather = Object.assign({}, base.profile.weather, (parsed.profile && parsed.profile.weather) || {});
+    profile.outfitLayout = normalizeOutfitLayout((parsed.profile && parsed.profile.outfitLayout) || base.profile.outfitLayout);
     profile.cardImageScale = Math.min(100, Math.max(45, Number(profile.cardImageScale) || 72));
     profile.avatar = typeof profile.avatar === 'string' ? profile.avatar : '';
     return {
@@ -376,8 +396,15 @@ function normalizeLoadedState() {
   state.profile.cardImageScale = Math.min(100, Math.max(45, Number(state.profile.cardImageScale) || 72));
   state.profile.avatar = typeof state.profile.avatar === 'string' ? state.profile.avatar : '';
   state.profile.weather = Object.assign({ city: '', latitude: null, longitude: null, timezone: 'auto', current: null, updatedAt: 0 }, state.profile.weather || {});
+  state.profile.outfitLayout = normalizeOutfitLayout(state.profile.outfitLayout);
   state.laundry = Object.assign({ lastWashDate: todayStr(), cycleDays: 2, snoozedUntil: null, history: [] }, state.laundry || {});
   state.laundry.history = Array.isArray(state.laundry.history) ? state.laundry.history : [];
+  state.consumables = Array.isArray(state.consumables) ? state.consumables : [];
+  state.consumables.forEach(c => {
+    c.history = Array.isArray(c.history) ? c.history : [];
+    c.laundryPending = !!c.laundryPending;
+    c.laundryAt = c.laundryAt || null;
+  });
   state.drafts = Object.assign({ addItem: null, wishlist: null }, state.drafts || {});
 }
 normalizeLoadedState();
@@ -438,7 +465,9 @@ function activateView(view) {
   const isHome = view === 'home';
   app.classList.toggle('is-home-view', isHome);
   document.body.classList.toggle('home-page', isHome);
+  document.getElementById('mainScroll').classList.toggle('is-retired-scroll', view === 'wardrobe' && document.getElementById('view-wardrobe')?.classList.contains('is-retired-view'));
   document.getElementById('mainScroll').scrollTop = 0;
+  syncHomeRackExpansion();
 }
 function restoreHistoryView(view) {
   if (view && document.getElementById('view-' + view)) {
@@ -555,15 +584,21 @@ function recordLaundryEvent(date = todayStr(), options = {}) {
   const boostedIds = Array.from(new Set(
     (options.boostedItemIds || (options.extraWash && options.itemId ? [options.itemId] : [])).filter(Boolean)
   ));
+  const consumableIds = Array.from(new Set((options.consumableIds || []).filter(Boolean)));
   const index = state.laundry.history.findIndex(entry => (typeof entry === 'string' ? entry : entry?.date) === date);
   if (index < 0) {
-    state.laundry.history.unshift(boostedIds.length ? { date, extraWashItemIds: boostedIds } : date);
+    if (!boostedIds.length && !consumableIds.length) { state.laundry.history.unshift(date); return; }
+    const entry = { date };
+    if (boostedIds.length) entry.extraWashItemIds = boostedIds;
+    if (consumableIds.length) entry.laundryConsumableIds = consumableIds;
+    state.laundry.history.unshift(entry);
     return;
   }
-  if (!boostedIds.length) return;
+  if (!boostedIds.length && !consumableIds.length) return;
   const existing = state.laundry.history[index];
-  const entry = typeof existing === 'string' ? { date: existing, extraWashItemIds: [] } : (existing || { date });
-  entry.extraWashItemIds = Array.from(new Set([...(entry.extraWashItemIds || []), ...boostedIds]));
+  const entry = typeof existing === 'string' ? { date: existing } : (existing || { date });
+  if (boostedIds.length) entry.extraWashItemIds = Array.from(new Set([...(entry.extraWashItemIds || []), ...boostedIds]));
+  if (consumableIds.length) entry.laundryConsumableIds = Array.from(new Set([...(entry.laundryConsumableIds || []), ...consumableIds]));
   state.laundry.history[index] = entry;
 }
 function laundryHistoryDates() {
@@ -685,6 +720,26 @@ function importSeedItems() {
 function daysUsed(c) { return Math.max(0, daysBetween(c.startDate, todayStr())); }
 function isOverdue(c) { return c.cycleDays !== null && daysUsed(c) >= c.cycleDays; }
 function isTowelId(id) { return id === 'towelA' || id === 'towelB'; }
+function isLaundryConsumable(c) { return !!c && (isTowelId(c.id) || c.id === 'sheets'); }
+function getPendingLaundryConsumables() {
+  return (state.consumables || []).filter(c => isLaundryConsumable(c) && c.laundryPending);
+}
+function sendConsumableToLaundry(id) {
+  const c = state.consumables.find(x => x.id === id);
+  if (!c || !isLaundryConsumable(c) || c.laundryPending) return;
+  c.laundryPending = true;
+  c.laundryAt = todayStr();
+  if (isTowelId(id) && state.activeTowel === id) {
+    const otherId = id === 'towelA' ? 'towelB' : 'towelA';
+    const other = state.consumables.find(x => x.id === otherId);
+    state.activeTowel = otherId;
+    if (other) other.startDate = todayStr();
+  }
+  saveState();
+  renderAll();
+  closeModal();
+  toast(`${c.name} 已放入洗衣籃，等待清洗中`);
+}
 function handleConsumableReset(id) {
   const c = state.consumables.find(x => x.id === id);
   if (!c) return;
@@ -720,12 +775,23 @@ function nextWashDate() {
   return natural;
 }
 function isLaundryDueToday() { return nextWashDate() <= todayStr(); }
+function completeConsumableLaundry(c, date = todayStr()) {
+  if (!c) return;
+  c.history = Array.isArray(c.history) ? c.history : [];
+  c.history.unshift({ date: c.laundryAt || date, washedDate: date, status: 'washed' });
+  c.lastWashedDate = date;
+  c.startDate = date;
+  c.laundryPending = false;
+  c.laundryAt = null;
+}
 function completeLaundryDone() {
   const dirtyItems = state.items.filter(item => item.status === 'dirty');
+  const pendingConsumables = getPendingLaundryConsumables();
   dirtyItems.forEach(recordItemWash);
+  pendingConsumables.forEach(c => completeConsumableLaundry(c));
   state.laundry.lastWashDate = todayStr();
   state.laundry.snoozedUntil = null;
-  recordLaundryEvent(todayStr());
+  recordLaundryEvent(todayStr(), { consumableIds: pendingConsumables.map(c => c.id) });
   saveState();
   renderAll();
   toast('已記錄洗衣日，洗衣籃內容也已更新');
@@ -762,12 +828,15 @@ function getNotifications() {
     list.push({ type: 'item', id: i.id, text: `${i.name} 該洗了`, thumb: i });
   });
   state.consumables.forEach(c => {
+    if (c.laundryPending) return;
     if (isTowelId(c.id) && state.activeTowel !== c.id) return; // standby towel: no reminder
     if (isOverdue(c)) list.push({ type: 'consumable', id: c.id, text: `${c.name} 已經用了 ${daysUsed(c)} 天，該更換了`, icon: c.icon });
   });
-  if (isLaundryDueToday()) {
+  const pendingConsumables = getPendingLaundryConsumables();
+  if (isLaundryDueToday() || pendingConsumables.length) {
     const overdueDays = Math.max(0, daysBetween(nextWashDate(), todayStr()));
-    list.push({ type: 'laundry', id: 'laundry', text: overdueDays > 0 ? `已經過了 ${overdueDays} 天沒洗衣服了` : '今天該洗衣服囉', icon: 'basket' });
+    const pendingText = pendingConsumables.length ? `洗衣籃有 ${pendingConsumables.length} 件耗材等待清洗` : '';
+    list.push({ type: 'laundry', id: 'laundry', text: pendingText || (overdueDays > 0 ? `已經過了 ${overdueDays} 天沒洗衣服了` : '今天該洗衣服囉'), icon: 'basket' });
   }
   return list;
 }
@@ -797,16 +866,20 @@ function renderHeader() {
   app.classList.toggle('is-night-view', isNight);
   document.body.classList.toggle('night-page', isNight && document.body.classList.contains('home-page'));
   const themeMeta = document.querySelector('meta[name="theme-color"]');
-  if (themeMeta) themeMeta.setAttribute('content', isNight ? '#232C48' : '#CFE0F5');
+  if (themeMeta) themeMeta.setAttribute('content', isNight ? '#30247A' : '#8E9FEA');
   const sceneSky = document.getElementById('sceneSky');
   const weatherCode = Number(current?.weather_code);
   const rainCodes = [51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99];
   const snowCodes = [71, 73, 75, 77, 85, 86];
   const cloudyCodes = [2, 3, 45, 48];
+  const isRain = rainCodes.includes(weatherCode);
+  const isSnow = snowCodes.includes(weatherCode);
+  const isCloudy = cloudyCodes.includes(weatherCode);
   sceneSky?.classList.toggle('is-night', isNight);
-  sceneSky?.classList.toggle('is-rain', rainCodes.includes(weatherCode));
-  sceneSky?.classList.toggle('is-snow', snowCodes.includes(weatherCode));
-  sceneSky?.classList.toggle('is-cloudy', cloudyCodes.includes(weatherCode));
+  sceneSky?.classList.toggle('is-rain', isRain);
+  sceneSky?.classList.toggle('is-snow', isSnow);
+  sceneSky?.classList.toggle('is-cloudy', isCloudy);
+  sceneSky?.classList.toggle('is-clear', !isRain && !isSnow && !isCloudy);
   renderWeather();
 }
 
@@ -910,7 +983,10 @@ function renderAvatar() {
   if (!img || !fallback || !btn) return;
   img.hidden = !src;
   fallback.hidden = !!src;
+  fallback.style.display = src ? 'none' : '';
+  img.style.display = src ? 'block' : 'none';
   btn.classList.toggle('has-avatar', !!src);
+  btn.setAttribute('aria-label', src ? '設定（已使用自訂頭像）' : '設定');
   if (src) img.src = src;
   const preview = document.getElementById('avatarPreview');
   const clear = document.getElementById('btnClearAvatar');
@@ -1022,11 +1098,22 @@ async function refreshWeather(force = false) {
   }
 }
 
+function syncHomeRackExpansion() {
+  const main = document.getElementById('mainScroll');
+  const app = document.getElementById('app');
+  if (!main || !app) return;
+  const isHome = document.getElementById('view-home')?.classList.contains('is-active');
+  app.classList.toggle('home-racks-expanded', !!isHome && main.scrollTop > 28);
+}
 function renderHome() {
+  syncHomeRackExpansion();
   ['hat', 'top', 'bottom', 'shoes'].forEach(slot => {
     const btn = document.querySelector(`.figure-slot[data-slot="${slot}"]`);
     const thumb = btn.querySelector('.figure-thumb');
     const itemId = state.today[slot];
+    const layout = (state.profile.outfitLayout && state.profile.outfitLayout[slot]) || OUTFIT_LAYOUT_DEFAULTS[slot];
+    thumb.style.transform = `translate(${layout.x}%, ${layout.y}%) scale(${layout.scale / 100})`;
+    thumb.style.transformOrigin = 'center center';
     const item = itemId ? findItem(itemId) : null;
     const ratio = HOME_SLOT_RATIOS[slot] || getCategoryAspectRatio(slot);
     if (item) {
@@ -1057,9 +1144,11 @@ function renderHome() {
 
   const rack = state.items.filter(i => i.status === 'resting');
   const basket = state.items.filter(i => i.status === 'dirty');
+  const pendingConsumables = getPendingLaundryConsumables();
   renderChipList('tempRackList', 'tempRackEmpty', rack, { pinActiveTowel: true });
-  renderChipList('basketList', 'basketEmpty', basket);
+  renderChipList('basketList', 'basketEmpty', basket, { pendingConsumables });
   document.getElementById('basketTitle').textContent = `洗衣籃・${Math.max(0, daysBetween(state.laundry.lastWashDate, todayStr()))}天`;
+  document.getElementById('basketCardStatus')?.replaceChildren(document.createTextNode(basket.length || pendingConsumables.length ? '等待清洗中' : ''));
 }
 function renderChipList(listId, emptyId, items, opts) {
   const list = document.getElementById(listId);
@@ -1078,7 +1167,18 @@ function renderChipList(listId, emptyId, items, opts) {
     }
   }
 
-  if (!items.length) { empty.hidden = list.children.length > 0; return; }
+  if (opts && Array.isArray(opts.pendingConsumables)) {
+    opts.pendingConsumables.forEach(c => {
+      const chip = document.createElement('button');
+      chip.className = 'rack-chip rack-chip-consumable';
+      chip.type = 'button';
+      chip.innerHTML = `<span class="rack-chip-thumb">${ICONS[c.icon] || ''}</span><span class="rack-chip-text">${escapeHtml(c.name)}・等待清洗中</span>`;
+      chip.addEventListener('click', e => { e.stopPropagation(); openConsumableDetail(c.id); });
+      list.appendChild(chip);
+    });
+  }
+
+  if (!items.length && !list.children.length) { empty.hidden = false; return; }
   empty.hidden = true;
   items.slice(0, 8).forEach(item => {
     const chip = document.createElement('button');
@@ -1181,6 +1281,7 @@ function renderWardrobe() {
   const items = getVisibleWardrobeItems();
   const retiredView = uiWardrobeCat === 'retired';
   document.getElementById('view-wardrobe').classList.toggle('is-retired-view', retiredView);
+  document.getElementById('mainScroll')?.classList.toggle('is-retired-scroll', retiredView && activeView === 'wardrobe');
   const retiredBanner = document.getElementById('retiredBanner');
   if (retiredBanner) retiredBanner.hidden = !retiredView;
   document.getElementById('itemCount').textContent = retiredView ? `典藏・${items.length} 件` : `${items.length} 件`;
@@ -1453,14 +1554,15 @@ function renderConsumables() {
     const card = document.createElement('button');
     card.type = 'button';
     card.className = 'consumable-card' + (overdue ? ' is-overdue' : '') + (towel && !isActive ? ' is-standby' : '');
-    const daysHtml = (towel && !isActive) ? `<p class="c-days">備用中</p>` : `<p class="c-days">已用了 <b>${used}</b> 天</p>`;
+    const daysHtml = c.laundryPending ? `<p class="c-days c-waiting-wash">等待清洗中</p>` : (towel && !isActive) ? `<p class="c-days">備用中</p>` : `<p class="c-days">已用了 <b>${used}</b> 天</p>`;
     card.innerHTML = `
       <span class="c-icon">${consumableImage(c) ? `<img src="${consumableImage(c)}" alt="">` : (ICONS[c.icon]||'')}</span>
       <p class="c-name">${escapeHtml(c.name)}</p>
       ${daysHtml}
       <p class="c-cycle">週期 ${c.cycleDays === null ? '無限制' : c.cycleDays + ' 天'}</p>
-      ${overdue ? '<span class="c-flag">該換了</span>' : ''}
-      ${towel && !isActive ? '<span class="c-standby-flag">備用</span>' : ''}`;
+      ${overdue && !c.laundryPending ? '<span class="c-flag">該換了</span>' : ''}
+      ${c.laundryPending ? '<span class="c-standby-flag c-waiting-flag">等待清洗</span>' : ''}
+      ${towel && !isActive && !c.laundryPending ? '<span class="c-standby-flag">備用</span>' : ''}`;
     card.addEventListener('click', () => openConsumableDetail(c.id));
     grid.appendChild(card);
   });
@@ -1477,7 +1579,14 @@ function openConsumableDetail(id) {
   const lastReplacedLabel = c.history.length ? fmtDate(c.history[0].date) : `${fmtDate(c.startDate)}（尚未更換過）`;
 
   let statsHtml, actionLabel;
-  if (towel && !isActive) {
+  if (c.laundryPending) {
+    statsHtml = `<div class="detail-stats">
+      <div class="detail-stat"><b>等待清洗</b><span>目前狀態</span></div>
+      <div class="detail-stat"><b>${fmtDate(c.laundryAt || todayStr())}</b><span>放入洗衣籃</span></div>
+      <div class="detail-stat"><b>${c.history.length}</b><span>歷史次數</span></div>
+    </div>`;
+    actionLabel = '已在洗衣籃等待清洗';
+  } else if (towel && !isActive) {
     statsHtml = `<div class="detail-stats">
       <div class="detail-stat"><b>備用</b><span>目前狀態</span></div>
       <div class="detail-stat"><b>${cycleLabel}</b><span>週期天數</span></div>
@@ -1502,16 +1611,19 @@ function openConsumableDetail(id) {
           <button type="button" class="stepper-btn" id="cCyclePlus">＋</button>
         </div>
       </div>`;
-    actionLabel = towel ? '提前丟到洗衣籃' : (overdue ? '已更換，重新計算' : '提前更換／清洗');
+    actionLabel = isLaundryConsumable(c) ? '提前丟到洗衣籃' : (overdue ? '已更換，重新計算' : '提前更換／清洗');
   }
   body.innerHTML = `
     <div class="modal-head"><h2>${escapeHtml(c.name)}</h2><button class="modal-close" data-close>✕</button></div>
     ${statsHtml}
-    <button class="btn-primary" id="btnResetConsumable">${actionLabel}</button>
+    <button class="btn-primary" id="btnResetConsumable"${c.laundryPending ? ' disabled' : ''}>${actionLabel}</button>
     <p class="detail-meta">上次更換日期：${lastReplacedLabel}</p>
   `;
   body.querySelector('[data-close]').addEventListener('click', closeModal);
-  body.querySelector('#btnResetConsumable').addEventListener('click', () => { handleConsumableReset(id); closeModal(); });
+  body.querySelector('#btnResetConsumable').addEventListener('click', () => {
+    if (isLaundryConsumable(c) && !c.laundryPending && !(towel && !isActive)) sendConsumableToLaundry(id);
+    else { handleConsumableReset(id); closeModal(); }
+  });
 
   const usedMinus = body.querySelector('#cUsedMinus'), usedPlus = body.querySelector('#cUsedPlus');
   if (usedMinus) usedMinus.addEventListener('click', () => {
@@ -1548,6 +1660,10 @@ function renderNotifications() {
   const notifs = getNotifications();
   const badge = document.getElementById('notifBadge');
   badge.hidden = notifs.length === 0;
+  if (badge) {
+    badge.textContent = notifs.length > 99 ? '99+' : String(notifs.length);
+    badge.setAttribute('aria-label', `${notifs.length} 則未讀提醒`);
+  }
   const list = document.getElementById('notifList');
   const empty = document.getElementById('notifEmpty');
   list.innerHTML = '';
@@ -2235,6 +2351,104 @@ function renderTagPickerChips() {
   });
 }
 
+let outfitEditorSlot = 'top';
+let outfitPointerDrag = null;
+let outfitScaleSaveTimer = null;
+const OUTFIT_EDITOR_SLOTS = ['hat', 'top', 'bottom', 'shoes'];
+const OUTFIT_EDITOR_Y = { hat: 13, top: 35, bottom: 61, shoes: 86 };
+const OUTFIT_EDITOR_WIDTH = { hat: 24, top: 30, bottom: 29, shoes: 25 };
+function outfitEditorItem(slot) { return state.today[slot] ? findItem(state.today[slot]) : null; }
+function outfitEditorPositionText(layout) {
+  const x = Math.round(layout.x || 0), y = Math.round(layout.y || 0);
+  if (!x && !y) return '中央';
+  return `${x > 0 ? '+' : ''}${x}%、${y > 0 ? '+' : ''}${y}%`;
+}
+function updateOutfitEditorControls() {
+  const layout = state.profile.outfitLayout[outfitEditorSlot] || OUTFIT_LAYOUT_DEFAULTS[outfitEditorSlot];
+  const slider = document.getElementById('outfitScaleSlider');
+  const value = document.getElementById('outfitScaleValue');
+  const position = document.getElementById('outfitPositionValue');
+  if (slider) slider.value = String(layout.scale);
+  if (value) value.textContent = `${layout.scale}%`;
+  if (position) position.textContent = outfitEditorPositionText(layout);
+}
+function applyOutfitEditorObjectStyle(el, slot) {
+  const layout = state.profile.outfitLayout[slot] || OUTFIT_LAYOUT_DEFAULTS[slot];
+  el.style.left = '50%';
+  el.style.top = `${OUTFIT_EDITOR_Y[slot]}%`;
+  el.style.width = `${OUTFIT_EDITOR_WIDTH[slot]}%`;
+  el.style.transform = `translate(-50%, -50%) translate(${layout.x}%, ${layout.y}%) scale(${layout.scale / 100})`;
+}
+function selectOutfitEditorSlot(slot) {
+  outfitEditorSlot = slot;
+  renderOutfitEditor();
+}
+function attachOutfitEditorDrag(el, slot) {
+  el.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    const stage = document.getElementById('outfitEditorStage');
+    if (!stage) return;
+    outfitEditorSlot = slot;
+    const layout = state.profile.outfitLayout[slot];
+    outfitPointerDrag = { slot, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, startXLayout: layout.x, startYLayout: layout.y, stage };
+    el.setPointerCapture?.(e.pointerId);
+    el.classList.add('is-dragging');
+    e.preventDefault();
+  });
+  el.addEventListener('pointermove', e => {
+    const drag = outfitPointerDrag;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    const layout = state.profile.outfitLayout[drag.slot];
+    const dx = (e.clientX - drag.startX) / Math.max(1, drag.stage.clientWidth) * 100;
+    const dy = (e.clientY - drag.startY) / Math.max(1, drag.stage.clientHeight) * 100;
+    layout.x = Math.min(28, Math.max(-28, Math.round(drag.startXLayout + dx)));
+    layout.y = Math.min(28, Math.max(-28, Math.round(drag.startYLayout + dy)));
+    applyOutfitEditorObjectStyle(el, drag.slot);
+    updateOutfitEditorControls();
+    e.preventDefault();
+  });
+  const finish = e => {
+    const drag = outfitPointerDrag;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    outfitPointerDrag = null;
+    el.classList.remove('is-dragging');
+    saveState();
+    renderHome();
+    updateOutfitEditorControls();
+  };
+  el.addEventListener('pointerup', finish);
+  el.addEventListener('pointercancel', finish);
+}
+function renderOutfitEditor() {
+  const stage = document.getElementById('outfitEditorStage');
+  const tabs = document.getElementById('outfitEditorSlotTabs');
+  if (!stage || !tabs) return;
+  tabs.innerHTML = OUTFIT_EDITOR_SLOTS.map(slot => `<button type="button" class="outfit-editor-slot-tab${outfitEditorSlot === slot ? ' is-active' : ''}" data-outfit-editor-slot="${slot}">${categoryLabel(slot)}</button>`).join('');
+  tabs.querySelectorAll('[data-outfit-editor-slot]').forEach(btn => btn.addEventListener('click', () => selectOutfitEditorSlot(btn.dataset.outfitEditorSlot)));
+  stage.innerHTML = OUTFIT_EDITOR_SLOTS.map(slot => {
+    const item = outfitEditorItem(slot);
+    const content = item?.image ? `<img src="${escapeHtml(item.image)}" alt="">` : (ICONS[slot] || '');
+    return `<button type="button" class="outfit-editor-object outfit-editor-object-${slot}${outfitEditorSlot === slot ? ' is-selected' : ''}" data-outfit-editor-object="${slot}" aria-label="調整${categoryLabel(slot)}"><span class="outfit-editor-object-thumb">${content}</span><span class="outfit-editor-object-name">${item ? escapeHtml(item.name) : categoryLabel(slot)}</span></button>`;
+  }).join('');
+  stage.querySelectorAll('[data-outfit-editor-object]').forEach(el => {
+    const slot = el.dataset.outfitEditorObject;
+    applyOutfitEditorObjectStyle(el, slot);
+    el.addEventListener('click', e => {
+      if (el.classList.contains('is-dragging')) return;
+      if (!outfitPointerDrag) { outfitEditorSlot = slot; renderOutfitEditor(); }
+      e.stopPropagation();
+    });
+    attachOutfitEditorDrag(el, slot);
+  });
+  updateOutfitEditorControls();
+}
+function openOutfitEditor() {
+  outfitEditorSlot = state.today.top ? 'top' : 'hat';
+  modalReturnTo = 'modal-settings';
+  renderOutfitEditor();
+  openModal('modal-outfit-editor');
+}
+
 function openAddModal(editId = null) {
   editingItemId = editId;
   pendingPhoto = null;
@@ -2404,9 +2618,15 @@ function renderLaundryOverview() {
   const empty = document.getElementById('laundryOverviewEmpty');
   if (!grid || !empty) return;
   const items = state.items.filter(i => i.status === 'dirty');
+  const pendingConsumables = getPendingLaundryConsumables();
   grid.innerHTML = '';
-  empty.hidden = items.length !== 0;
+  empty.hidden = items.length !== 0 || pendingConsumables.length !== 0;
   items.forEach(item => grid.appendChild(buildItemCard(item, { laundryMode: true })));
+  const consumableGrid = document.getElementById('laundryConsumableGrid');
+  if (consumableGrid) {
+    consumableGrid.innerHTML = pendingConsumables.map(c => `<button type="button" class="laundry-consumable-row" data-consumable-id="${escapeHtml(c.id)}"><span class="laundry-consumable-icon">${ICONS[c.icon] || ''}</span><span class="laundry-consumable-name"><b>${escapeHtml(c.name)}</b><small>等待清洗中</small></span><span class="laundry-consumable-arrow">›</span></button>`).join('');
+    consumableGrid.querySelectorAll('[data-consumable-id]').forEach(row => row.addEventListener('click', () => openConsumableDetail(row.dataset.consumableId)));
+  }
 }
 function openLaundryModal() {
   renderLaundryOverview();
@@ -2761,6 +2981,7 @@ function wireEvents() {
   });
 
   document.getElementById('btnNotifications').addEventListener('click', () => { renderNotifications(); openModal('modal-notif'); });
+  document.getElementById('mainScroll').addEventListener('scroll', syncHomeRackExpansion, { passive: true });
   function setPickerBtn(id, value) {
     const el = document.getElementById(id);
     if (value === null) { el.textContent = '無'; el.dataset.value = 'none'; }
@@ -2782,6 +3003,25 @@ function wireEvents() {
     document.getElementById('weatherSearchResults').innerHTML = '';
     modalReturnTo = null;
     openModal('modal-settings');
+  });
+  document.getElementById('btnOpenOutfitEditor').addEventListener('click', openOutfitEditor);
+  document.getElementById('btnCloseOutfitEditor').addEventListener('click', closeModal);
+  document.getElementById('outfitScaleSlider').addEventListener('input', e => {
+    const layout = state.profile.outfitLayout[outfitEditorSlot];
+    layout.scale = Math.min(130, Math.max(70, Number(e.target.value) || 100));
+    updateOutfitEditorControls();
+    renderHome();
+    clearTimeout(outfitScaleSaveTimer);
+    outfitScaleSaveTimer = setTimeout(() => saveState(), 320);
+  });
+  document.getElementById('btnResetOutfitPosition').addEventListener('click', () => {
+    const layout = state.profile.outfitLayout[outfitEditorSlot];
+    layout.x = 0;
+    layout.y = 0;
+    saveState();
+    renderOutfitEditor();
+    renderHome();
+    toast(`已重設${categoryLabel(outfitEditorSlot)}位置`);
   });
   document.getElementById('btnExportData').addEventListener('click', async () => {
     // avoid blob: URLs entirely — in an installed iOS PWA, clicking a blob: link
