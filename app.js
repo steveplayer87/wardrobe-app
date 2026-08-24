@@ -12,6 +12,7 @@ const ICONS = {
   wardrobe: `<svg viewBox="0 0 24 24" fill="none"><rect x="4.5" y="3.5" width="15" height="17" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M12 3.5v17" stroke="currentColor" stroke-width="1.8"/><path d="M9.3 12v1.3M14.7 12v1.3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
   inspire: `<svg viewBox="0 0 24 24" fill="none"><path d="M12 3.5a5.5 5.5 0 0 1 3.2 10c-.6.4-1 1.1-1 1.9v.6H9.8v-.6c0-.8-.4-1.5-1-1.9a5.5 5.5 0 0 1 3.2-10Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9.8 19h4.4M10.3 21h3.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
   more: `<svg viewBox="0 0 24 24" fill="none"><circle cx="5" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="19" cy="12" r="1.8" fill="currentColor"/></svg>`,
+  washBoost: `<svg viewBox="0 0 24 24" fill="none"><path d="M12 3.5c1.5 2.2 3.8 4.6 3.8 7.4A3.8 3.8 0 1 1 8.2 11c0-2.8 2.3-5.2 3.8-7.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="m18.5 3.5.6 1.5 1.5.6-1.5.6-.6 1.5-.6-1.5-1.5-.6 1.5-.6.6-1.5ZM19.5 11l.4 1 .9.4-.9.4-.4 1-.4-1-.9-.4.9-.4.4-1Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>`,
   filter: `<svg viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="9" cy="6" r="2" fill="var(--color-surface)" stroke="currentColor" stroke-width="1.6"/><circle cx="16" cy="12" r="2" fill="var(--color-surface)" stroke="currentColor" stroke-width="1.6"/><circle cx="10" cy="18" r="2" fill="var(--color-surface)" stroke="currentColor" stroke-width="1.6"/></svg>`,
   search: `<svg viewBox="0 0 24 24" fill="none"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="1.7"/><path d="M19 19 15.2 15.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`,
   top: `<svg viewBox="0 0 24 24" fill="none"><path d="M9 3.5 12 5l3-1.5 4 3-2.3 2.8L15 8v11.5a1 1 0 0 1-1 1H10a1 1 0 0 1-1-1V8l-1.7 1.3L5 6.5l4-3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>`,
@@ -356,6 +357,7 @@ function normalizeLoadedState() {
   state.items.forEach(item => {
     item.washHistory = Array.isArray(item.washHistory) ? item.washHistory : [];
     item.lastWashedDate = item.lastWashedDate || null;
+    item.extraWash = !!item.extraWash;
     if (item.status === 'dirty' && !item.basketAt) item.basketAt = item.lastWornDate || todayStr();
     if (item.status === 'resting' && !item.restingSince) item.restingSince = item.lastWornDate || todayStr();
     if (item.status !== 'dirty') item.basketAt = item.basketAt || null;
@@ -366,6 +368,8 @@ function normalizeLoadedState() {
   state.profile.cardImageScale = Math.min(100, Math.max(45, Number(state.profile.cardImageScale) || 72));
   state.profile.avatar = typeof state.profile.avatar === 'string' ? state.profile.avatar : '';
   state.profile.weather = Object.assign({ city: '', latitude: null, longitude: null, timezone: 'auto', current: null, updatedAt: 0 }, state.profile.weather || {});
+  state.laundry = Object.assign({ lastWashDate: todayStr(), cycleDays: 2, snoozedUntil: null, history: [] }, state.laundry || {});
+  state.laundry.history = Array.isArray(state.laundry.history) ? state.laundry.history : [];
   state.drafts = Object.assign({ addItem: null, wishlist: null }, state.drafts || {});
 }
 normalizeLoadedState();
@@ -537,28 +541,45 @@ function setTodaySlot(slot, itemId) {
   renderHome();
   renderWardrobe();
 }
-function recordLaundryEvent(date = todayStr()) {
+function recordLaundryEvent(date = todayStr(), options = {}) {
   state.laundry = state.laundry || { lastWashDate: date, cycleDays: 2, snoozedUntil: null, history: [] };
   state.laundry.history = Array.isArray(state.laundry.history) ? state.laundry.history : [];
-  if (!state.laundry.history.some(entry => (typeof entry === 'string' ? entry : entry?.date) === date)) {
-    state.laundry.history.unshift(date);
+  const boostedIds = Array.from(new Set(
+    (options.boostedItemIds || (options.extraWash && options.itemId ? [options.itemId] : [])).filter(Boolean)
+  ));
+  const index = state.laundry.history.findIndex(entry => (typeof entry === 'string' ? entry : entry?.date) === date);
+  if (index < 0) {
+    state.laundry.history.unshift(boostedIds.length ? { date, extraWashItemIds: boostedIds } : date);
+    return;
   }
+  if (!boostedIds.length) return;
+  const existing = state.laundry.history[index];
+  const entry = typeof existing === 'string' ? { date: existing, extraWashItemIds: [] } : (existing || { date });
+  entry.extraWashItemIds = Array.from(new Set([...(entry.extraWashItemIds || []), ...boostedIds]));
+  state.laundry.history[index] = entry;
 }
 function laundryHistoryDates() {
   return new Set((state.laundry?.history || []).map(entry => typeof entry === 'string' ? entry : entry?.date).filter(Boolean));
 }
+function laundryExtraWashDates() {
+  return new Set((state.laundry?.history || [])
+    .filter(entry => typeof entry !== 'string' && Array.isArray(entry?.extraWashItemIds) && entry.extraWashItemIds.length)
+    .map(entry => entry.date).filter(Boolean));
+}
 function recordItemWash(item) {
   if (!item) return;
   const date = todayStr();
+  const extraWash = !!item.extraWash;
   item.washHistory = item.washHistory || [];
-  item.washHistory.unshift({ date, basketAt: item.basketAt || null });
-  recordLaundryEvent(date);
+  item.washHistory.unshift({ date, basketAt: item.basketAt || null, extraWash });
+  recordLaundryEvent(date, { itemId: item.id, extraWash });
   item.lastWashedDate = date;
   item.wearCount = 0;
   item.status = 'clean';
   item.basketAt = null;
   item.restingSince = null;
   item.wornToday = false;
+  item.extraWash = false;
 }
 function markItemClean(itemId) {
   const item = findItem(itemId);
@@ -577,6 +598,17 @@ function sendToBasketNow(itemId) {
   saveState();
   renderAll();
   toast(`${item.name} 已丟進洗衣籃`);
+}
+function toggleExtraWash(itemId) {
+  const item = findItem(itemId);
+  if (!item || !['resting', 'dirty'].includes(item.status)) return;
+  item.extraWash = !item.extraWash;
+  saveState();
+  renderAll();
+  const activeModal = document.querySelector('.modal-sheet.is-active')?.id;
+  if (activeModal === 'modal-laundry') openLaundryModal();
+  if (activeModal === 'modal-rack-overview') openRackOverview();
+  toast(item.extraWash ? `${item.name} 已標記加強清洗` : `${item.name} 已取消加強清洗`);
 }
 function wearOnceMore(itemId) {
   // "再穿一次": don't wash it yet — temporarily un-flag dirty so it's
@@ -680,14 +712,29 @@ function nextWashDate() {
   return natural;
 }
 function isLaundryDueToday() { return nextWashDate() <= todayStr(); }
-function markLaundryDone() {
-  state.items.filter(item => item.status === 'dirty').forEach(recordItemWash);
+function completeLaundryDone() {
+  const dirtyItems = state.items.filter(item => item.status === 'dirty');
+  dirtyItems.forEach(recordItemWash);
   state.laundry.lastWashDate = todayStr();
   state.laundry.snoozedUntil = null;
   recordLaundryEvent(todayStr());
   saveState();
   renderAll();
   toast('已記錄洗衣日，洗衣籃內容也已更新');
+}
+function markLaundryDone() {
+  const boostedItems = state.items.filter(item => item.status === 'dirty' && item.extraWash);
+  if (boostedItems.length) {
+    const names = boostedItems.slice(0, 8).map(item => item.name).join('、');
+    const suffix = boostedItems.length > 8 ? ` 等 ${boostedItems.length} 件` : '';
+    openConfirm('確認洗好了嗎？', `以下單品已標記「加強清洗」：${names}${suffix}。確認後會把加強清洗註記寫入單品歷史與洗衣歷史。`, [
+      { label: '先不要', kind: 'secondary', returnTo: 'modal-laundry' },
+      { label: '確認洗好了', kind: 'primary', onClick: completeLaundryDone },
+    ]);
+    return false;
+  }
+  completeLaundryDone();
+  return true;
 }
 function postponeLaundry() {
   // postpone relative to *today* when overdue, not from a stale past date —
@@ -1140,6 +1187,15 @@ function toggleItemSelection(id) {
   document.getElementById('selectCount').textContent = `已選 ${uiSelectedIds.size} 件`;
   renderWardrobe();
 }
+function washHistoryEntry(entry) {
+  if (typeof entry === 'string') return { date: entry, basketAt: null, extraWash: false };
+  return { date: entry?.date || '', basketAt: entry?.basketAt || null, extraWash: !!entry?.extraWash };
+}
+function washBoostMarkup(item, opts) {
+  if (!opts || (!opts.laundryMode && !opts.rackMode) || !['dirty', 'resting'].includes(item.status)) return '';
+  const active = !!item.extraWash;
+  return `<span class="wash-boost-toggle${active ? ' is-active' : ''}" data-wash-boost="${escapeHtml(item.id)}" role="button" tabindex="0" aria-pressed="${active}" title="${active ? '取消加強清洗' : '標記加強清洗'}"><span class="wash-boost-icon">${ICONS.washBoost}</span><span>${active ? '已標記加強清洗' : '加強清洗'}</span></span>`;
+}
 function buildItemCard(item, opts) {
   opts = opts || {};
   const card = document.createElement('button');
@@ -1161,6 +1217,7 @@ function buildItemCard(item, opts) {
       ${item.brand ? `<p class="item-brand">${brandIconMarkup(item, 'tiny')}<span>${escapeHtml(item.brand)}</span></p>` : ''}
       <p class="item-name">${escapeHtml(item.name)}</p>
       <p class="item-wear">穿了 ${item.wearCount||0} 次${activityMeta}</p>
+      ${washBoostMarkup(item, opts)}
     </div>`;
 
   let longPressTimer = null;
@@ -1178,6 +1235,16 @@ function buildItemCard(item, opts) {
   card.addEventListener('touchend', cancelLongPress);
   card.addEventListener('touchcancel', cancelLongPress);
 
+  const boostToggle = card.querySelector('[data-wash-boost]');
+  if (boostToggle) {
+    const stopBoostEvent = e => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleExtraWash(item.id);
+    };
+    boostToggle.addEventListener('click', stopBoostEvent);
+    boostToggle.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') stopBoostEvent(e); });
+  }
   card.addEventListener('click', () => {
     if (longPressFired) { longPressFired = false; return; }
     if (opts.onClick) { opts.onClick(item); return; }
@@ -1209,6 +1276,7 @@ function renderHistory() {
   const today = todayStr();
   const laundryDays = laundryHistoryDates();
   if (state.laundry?.lastWashDate) laundryDays.add(state.laundry.lastWashDate);
+  const extraWashDays = laundryExtraWashDates();
   const towelDays = new Set(
     state.consumables.filter(c => isTowelId(c.id)).flatMap(c => (c.history || []).map(h => h.date))
   );
@@ -1239,7 +1307,11 @@ function renderHistory() {
     }
     let dotsHtml = '';
     if (laundryDays.has(dateStr)) dotsHtml += `<span class="cal-event-dot cal-dot-laundry"></span>`;
-    if (towelDays.has(dateStr)) dotsHtml += `<span class="cal-event-dot cal-dot-towel" style="${laundryDays.has(dateStr) ? 'right:14px' : ''}"></span>`;
+    if (extraWashDays.has(dateStr)) dotsHtml += `<span class="cal-event-dot cal-dot-laundry-boost" style="right:14px"></span>`;
+    if (towelDays.has(dateStr)) {
+      const towelRight = laundryDays.has(dateStr) ? (extraWashDays.has(dateStr) ? '24px' : '14px') : '';
+      dotsHtml += `<span class="cal-event-dot cal-dot-towel" style="${towelRight ? `right:${towelRight}` : ''}"></span>`;
+    }
     cell.innerHTML = `<span class="cal-num">${d}</span>${dotsHtml}${thumbsHtml}`;
     if (dayEntries) cell.addEventListener('click', () => openDayDetail(dateStr, dayEntries[0]));
     else if (dateStr < today) cell.addEventListener('click', () => openBackfillModal(dateStr));
@@ -1727,6 +1799,7 @@ function openItemDetail(itemId) {
     <p class="detail-name">${escapeHtml(item.name)}</p>
     ${item.brand ? `<p class="detail-brand">${brandIconMarkup(item, 'medium')}<span>${escapeHtml(item.brand)}</span></p>` : ''}
     <p class="detail-tags">${categoryLabel(item.category)}${lengthLabel ? ' · ' + lengthLabel : ''}${item.tags && item.tags.length ? ' · ' + item.tags.filter(t => t !== lengthLabel).map(escapeHtml).join('、') : ''} · ${statusLabel}</p>
+    ${item.extraWash && ['dirty', 'resting'].includes(item.status) ? '<p class="wash-boost-current">已標記：加強清洗</p>' : ''}
     <div class="detail-stats">
       <div class="detail-stat"><b>${item.wearCount||0}</b><span>本輪穿著</span></div>
       <div class="detail-stat"><b>${item.totalWearCount||0}</b><span>累計穿著</span></div>
@@ -1741,6 +1814,10 @@ function openItemDetail(itemId) {
     ${item.wearHistory && item.wearHistory.length ? `
       <p class="wear-history-heading">穿著歷史（共 ${item.wearHistory.length} 次）</p>
       <div class="wear-history-list">${item.wearHistory.slice(0, 30).map(d => `<div class="wear-history-row">${fmtDate(d)}</div>`).join('')}</div>
+    ` : ''}
+    ${item.washHistory && item.washHistory.length ? `
+      <p class="wear-history-heading">洗衣歷史（共 ${item.washHistory.length} 次）</p>
+      <div class="wear-history-list">${item.washHistory.slice(0, 30).map(entry => { const record = washHistoryEntry(entry); return `<div class="wear-history-row wash-history-row"><span>${fmtDate(record.date)}</span>${record.extraWash ? '<span class="history-boost-badge">加強清洗</span>' : ''}</div>`; }).join('')}</div>
     ` : ''}
   `;
   body.querySelector('#btnEditItem').innerHTML = ICONS.edit;
@@ -1764,11 +1841,14 @@ function openItemDetail(itemId) {
   } else {
     let html = '';
     if (ALL_SLOTS.includes(item.category)) html += `<button class="btn-secondary" id="aWearToday">設為今日穿搭</button>`;
+    if (['dirty', 'resting'].includes(item.status)) html += `<button class="btn-secondary" id="aBoost">${item.extraWash ? '取消加強清洗' : '標記加強清洗'}</button>`;
     if (item.status === 'dirty') html += `<button class="btn-secondary" id="aClean">已記錄清洗</button>`;
     if (item.status !== 'dirty') html += `<button class="btn-secondary" id="aBasket">丟進洗衣籃</button>`;
     actions.innerHTML = html;
     const aWearToday = actions.querySelector('#aWearToday');
     if (aWearToday) aWearToday.addEventListener('click', () => { setTodaySlot(item.category, item.id); closeModal(); toast(`已設為今日${categoryLabel(item.category)}`); });
+    const aBoost = actions.querySelector('#aBoost');
+    if (aBoost) aBoost.addEventListener('click', () => { toggleExtraWash(item.id); openItemDetail(item.id); });
     const aClean = actions.querySelector('#aClean');
     if (aClean) aClean.addEventListener('click', () => { markItemClean(item.id); closeModal(); });
     const aBasket = actions.querySelector('#aBasket');
@@ -2067,7 +2147,14 @@ function openConfirm(title, body, actions) {
     btn.style.flex = '1 1 auto';
     if (a.kind === 'primary') btn.style.marginTop = '0';
     btn.textContent = a.label;
-    btn.addEventListener('click', () => { if (a.onClick) a.onClick(); forceCloseModal(); });
+    btn.addEventListener('click', () => {
+      if (a.onClick) a.onClick();
+      forceCloseModal();
+      if (a.returnTo) window.setTimeout(() => {
+        if (a.returnTo === 'modal-laundry') openLaundryModal();
+        else openModal(a.returnTo);
+      }, 380);
+    });
     wrap.appendChild(btn);
   });
   openModal('modal-confirm');
@@ -2492,6 +2579,7 @@ function wireEvents() {
       if (!parsed || !Array.isArray(parsed.items)) throw new Error('格式不正確');
       Object.keys(state).forEach(k => delete state[k]);
       Object.assign(state, defaultState(), parsed);
+      normalizeLoadedState();
       saveState();
       renderAll();
       toast('匯入完成');
@@ -2921,7 +3009,7 @@ function wireEvents() {
   document.getElementById('card-basket').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openLaundryModal(); } });
   document.getElementById('card-rack').addEventListener('click', openRackOverview);
   document.getElementById('card-rack').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRackOverview(); } });
-  document.getElementById('btnLaundryDone').addEventListener('click', () => { markLaundryDone(); closeModal(); });
+  document.getElementById('btnLaundryDone').addEventListener('click', () => { if (markLaundryDone()) closeModal(); });
   document.getElementById('btnLaundryPostpone').addEventListener('click', () => { postponeLaundry(); closeModal(); });
 
   // calendar: swipe between months + jump-to-date + tap title to return to today
