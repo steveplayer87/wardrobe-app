@@ -31,6 +31,7 @@ const ICONS = {
   shopping: `<svg viewBox="0 0 24 24" fill="none"><path d="M6 8.5h12l1 11H5l1-11Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 9V6.5a3 3 0 0 1 6 0V9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
   link: `<svg viewBox="0 0 24 24" fill="none"><path d="M10 13.5a4 4 0 0 0 5.7.1l2.1-2.1a4 4 0 0 0-5.7-5.7l-1.2 1.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M14 10.5a4 4 0 0 0-5.7-.1l-2.1 2.1a4 4 0 0 0 5.7 5.7l1.2-1.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
   edit: `<svg viewBox="0 0 24 24" fill="none"><path d="M14.5 4.5 19.5 9.5 8.5 20.5H3.5v-5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>`,
+  close: `<svg viewBox="0 0 24 24" fill="none"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
   towel: `<svg viewBox="0 0 24 24" fill="none"><path d="M6 3.5h12a1 1 0 0 1 1 1V17H5V4.5a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M7 17v3M11 17v3.5M13 17v3M17 17v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
   sheets: `<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="7.5" width="18" height="11" rx="3" stroke="currentColor" stroke-width="1.6"/><path d="M3 12.5h18" stroke="currentColor" stroke-width="1.4"/><path d="M7.5 7.5V6a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v1.5" stroke="currentColor" stroke-width="1.4"/></svg>`,
   toothbrush: `<svg viewBox="0 0 24 24" fill="none"><rect x="10.5" y="9" width="3" height="12" rx="1.5" stroke="currentColor" stroke-width="1.6"/><rect x="9" y="4" width="6" height="6" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M10 4V2M12 4V1.5M14 4V2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
@@ -877,14 +878,19 @@ const WEATHER_LABELS = {
   85: ['陣雪', '雪'], 86: ['大陣雪', '雪'], 95: ['雷雨', '雷'], 96: ['雷雨', '雷'], 99: ['雷雨', '雷'],
 };
 function weatherText(code) { return WEATHER_LABELS[Number(code)] || ['天氣', '•']; }
+function weatherAreaLabel(weather) {
+  const raw = weather?.area || String(weather?.city || '').split(' · ')[0] || '';
+  return raw || '尚未設定地區';
+}
 function renderWeather() {
   const el = document.getElementById('sceneWeather');
   if (!el) return;
   const w = state.profile.weather || {};
-  if (!w.city || !w.current) { el.textContent = w.city ? `${w.city}・天氣更新中` : '設定城市後顯示天氣'; return; }
+  const area = weatherAreaLabel(w);
+  if (!w.city || !w.current) { el.textContent = w.city ? `${area}・天氣更新中` : '設定地區後顯示天氣'; return; }
   const [label, symbol] = weatherText(w.current.weather_code);
   const temp = Number.isFinite(Number(w.current.temperature_2m)) ? `${Math.round(Number(w.current.temperature_2m))}°` : '';
-  el.textContent = `${w.city}・${symbol} ${label}${temp ? ` ${temp}` : ''}`;
+  el.textContent = `${area}・${symbol} ${label}${temp ? ` ${temp}` : ''}`;
 }
 function syncWeatherSettings() {
   const input = document.getElementById('weatherCityInput');
@@ -920,7 +926,8 @@ async function searchWeatherCities() {
 }
 async function selectWeatherLocation(location) {
   if (!location) return;
-  state.profile.weather = { city: [location.name, location.admin2 || location.admin1, location.country].filter(Boolean).filter((value, index, values) => values.indexOf(value) === index).join(' · '), latitude: location.latitude, longitude: location.longitude, timezone: location.timezone || 'auto', current: null, updatedAt: 0 };
+  const area = location.admin2 || location.admin1 || location.name;
+  state.profile.weather = { city: location.name, area, latitude: location.latitude, longitude: location.longitude, timezone: location.timezone || 'auto', current: null, updatedAt: 0 };
   saveState();
   syncWeatherSettings();
   renderHeader();
@@ -971,9 +978,14 @@ function renderHome() {
   const outerItem = state.today.outer ? findItem(state.today.outer) : null;
   const accItem = state.today.accessory ? findItem(state.today.accessory) : null;
   const hintParts = [];
-  if (outerItem) hintParts.push(outerItem.name);
-  if (accItem) hintParts.push(accItem.name);
-  document.getElementById('figureExtrasLink').textContent = hintParts.length ? hintParts.join(' · ') : '點此選擇外套／配件';
+  if (outerItem) hintParts.push(`外套：${outerItem.name}`);
+  if (accItem) hintParts.push(`配件：${accItem.name}`);
+  const extrasButton = document.getElementById('figureExtrasLink');
+  if (extrasButton) {
+    const extrasLabel = hintParts.length ? hintParts.join('、') : '選擇外套或配件';
+    extrasButton.setAttribute('aria-label', extrasLabel);
+    extrasButton.title = extrasLabel;
+  }
 
   const rack = state.items.filter(i => i.status === 'resting');
   const basket = state.items.filter(i => i.status === 'dirty');
@@ -2237,6 +2249,21 @@ function openTryonPicker(slot) {
   renderTryonGridFor(slot, slot);
   openModal('modal-tryon');
 }
+function addExtrasClearAction() {
+  const clearWrap = document.getElementById('tryonClearWrap');
+  if (!clearWrap) return;
+  clearWrap.innerHTML = '';
+  const clearButton = document.createElement('button');
+  clearButton.type = 'button';
+  clearButton.className = 'btn-secondary extras-clear-btn';
+  clearButton.innerHTML = `${ICONS.close || ''}<span>清空今日穿搭</span>`;
+  clearButton.addEventListener('click', () => {
+    ALL_SLOTS.forEach(s => { if (state.today[s]) setTodaySlot(s, null); });
+    closeModal();
+    toast('已清空今日穿搭');
+  });
+  clearWrap.appendChild(clearButton);
+}
 function openExtrasPicker() {
   document.getElementById('tryonTitle').textContent = '選擇外套或配件';
   resetTryonToolbar();
@@ -2252,10 +2279,12 @@ function openExtrasPicker() {
       chipsWrap.querySelectorAll('.chip').forEach(c => c.classList.remove('is-active'));
       chip.classList.add('is-active');
       renderTryonGridFor(cat, cat);
+      addExtrasClearAction();
     });
     chipsWrap.appendChild(chip);
   });
   renderTryonGridFor('outer', 'outer');
+  addExtrasClearAction();
   openModal('modal-tryon');
 }
 
@@ -2360,7 +2389,8 @@ function wireEvents() {
     btn.addEventListener('click', () => openTryonPicker(btn.getAttribute('data-slot')));
   });
   document.getElementById('figureExtrasLink').addEventListener('click', openExtrasPicker);
-  document.getElementById('btnClearOotd').addEventListener('click', () => {
+  const clearOotdButton = document.getElementById('btnClearOotd');
+  if (clearOotdButton) clearOotdButton.addEventListener('click', () => {
     ALL_SLOTS.forEach(s => { if (state.today[s]) setTodaySlot(s, null); });
     toast('已清空今日穿搭');
   });
