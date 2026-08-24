@@ -743,12 +743,25 @@ function renderHeader() {
   document.body.classList.toggle('night-page', isNight && document.body.classList.contains('home-page'));
   const themeMeta = document.querySelector('meta[name="theme-color"]');
   if (themeMeta) themeMeta.setAttribute('content', isNight ? '#232C48' : '#CFE0F5');
-  document.getElementById('sceneSky').classList.toggle('is-night', isNight);
+  const sceneSky = document.getElementById('sceneSky');
+  const weatherCode = Number(current?.weather_code);
+  const rainCodes = [51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99];
+  const snowCodes = [71, 73, 75, 77, 85, 86];
+  const cloudyCodes = [2, 3, 45, 48];
+  sceneSky?.classList.toggle('is-night', isNight);
+  sceneSky?.classList.toggle('is-rain', rainCodes.includes(weatherCode));
+  sceneSky?.classList.toggle('is-snow', snowCodes.includes(weatherCode));
+  sceneSky?.classList.toggle('is-cloudy', cloudyCodes.includes(weatherCode));
   renderWeather();
 }
 
 function itemPhotoStyle(item) {
   return item.image ? `background-color:#fff;background-image:url('${item.image}');background-repeat:no-repeat;background-position:center` : 'background-color:#fff';
+}
+function itemPhotoMarkup(item) {
+  return item.image
+    ? `<img class="item-photo-image" src="${escapeHtml(item.image)}" alt="" loading="lazy">`
+    : thumbInner(item);
 }
 function calendarPhotoStyle(item) {
   return item.image ? `background-color:#fff;background-image:url('${item.image}');background-repeat:no-repeat;background-position:center bottom;background-size:contain` : 'background-color:#fff';
@@ -863,7 +876,7 @@ function renderAvatar() {
 function renderCardImageScale() {
   const value = Math.min(100, Math.max(45, Number(state.profile.cardImageScale) || 72));
   state.profile.cardImageScale = value;
-  document.getElementById('app')?.style.setProperty('--card-image-size', `${value}% auto`);
+  document.getElementById('app')?.style.setProperty('--card-image-size', `${value}%`);
   const slider = document.getElementById('cardImageScale');
   const output = document.getElementById('cardImageScaleValue');
   if (slider) slider.value = String(value);
@@ -1142,7 +1155,7 @@ function buildItemCard(item, opts) {
       ? `（${fmtDate(item.basketAt)} 入籃）`
       : '';
   card.innerHTML = `
-    <div class="item-photo" style="${itemPhotoStyle(item)}">${thumbInner(item)}</div>
+    <div class="item-photo">${itemPhotoMarkup(item)}</div>
     ${uiSelectMode ? `<span class="item-card-check"></span>` : (item.status !== 'retired' ? `<span class="item-status-dot ${statusClass}"></span>` : '')}
     <div class="item-info">
       ${item.brand ? `<p class="item-brand">${brandIconMarkup(item, 'tiny')}<span>${escapeHtml(item.brand)}</span></p>` : ''}
@@ -1298,7 +1311,7 @@ function renderRank() {
     card.type = 'button';
     card.className = 'item-card';
     card.innerHTML = `
-      <div class="item-photo" style="${itemPhotoStyle(item)}">${thumbInner(item)}</div>
+      <div class="item-photo">${itemPhotoMarkup(item)}</div>
       <span class="rank-badge">#${idx + 1}</span>
       <div class="item-info">
         <p class="item-name">${escapeHtml(item.name)}</p>

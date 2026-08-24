@@ -672,7 +672,7 @@ body.home-page.night-page { background: linear-gradient(180deg, #232C48 0, #3640
 .item-photo {
   background-repeat: no-repeat;
   background-position: center;
-  background-size: var(--card-image-size, 72% auto);
+  background-size: var(--card-image-size, 72%) auto;
 }
 .detail-photo, .photo-placeholder, .wishlist-photo, .cal-thumb, .ddr-thumb, .notif-thumb,
 .rack-chip .rack-chip-thumb { background-color: #fff; }
@@ -868,3 +868,93 @@ body.home-page.night-page { background: #fff; }
 .extras-clear-btn { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; margin: 0 0 10px; }
 .extras-clear-btn svg { width: 16px; height: 16px; }
 .tab-btn.is-active::after { bottom: -7px; }
+
+
+/* =========================== Round 6: compact first viewport and weather states =========================== */
+#app.is-home-view .scene-sky { height: 122px; }
+#app.is-home-view .figure-board { width: min(104px, 31%); gap: 1px; }
+#app.is-home-view .figure-core { gap: 0; }
+#app.is-home-view .figure-thumb { padding: 8%; }
+#app.is-home-view .figure-slot.has-photo .figure-thumb { background-size: contain; background-repeat: no-repeat; }
+#app.is-home-view .rack-row { margin-top: 8px; }
+#app.is-home-view .rack-card { height: 50px; min-height: 50px; padding: 8px 10px; }
+#app.is-home-view .rack-card-head { min-height: 34px; align-items: center; }
+#app.is-home-view .rack-card .rack-icon { width: 18px; height: 18px; }
+#app.is-home-view .rack-card .rack-title { line-height: 1.2; }
+
+/* Rain and snow use a cloud layer and precipitation layer; no sunny orb is shown. */
+#app.is-home-view .scene-sky::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  top: 40px;
+  width: 86px;
+  height: 25px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.78);
+  box-shadow: -24px 7px 0 -5px rgba(255,255,255,0.72), 24px 8px 0 -3px rgba(255,255,255,0.70);
+  opacity: 0;
+  transform: translateX(-50%) translateY(-3px);
+  transition: opacity 180ms ease, transform 180ms ease;
+  pointer-events: none;
+}
+#app.is-home-view .scene-sky::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  inset: 66px 0 0;
+  background: repeating-linear-gradient(112deg, transparent 0 12px, rgba(82,126,174,0.56) 12px 13.5px, transparent 13.5px 25px);
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 180ms ease, transform 180ms ease;
+  pointer-events: none;
+}
+#app.is-home-view .scene-sky.is-rain {
+  background: linear-gradient(180deg, #B7C5D5 0%, #E2E9EF 100%);
+}
+#app.is-home-view .scene-sky.is-night.is-rain {
+  background: linear-gradient(180deg, #25304A 0%, #46536F 100%);
+}
+#app.is-home-view .scene-sky.is-rain::before,
+#app.is-home-view .scene-sky.is-snow::before {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+#app.is-home-view .scene-sky.is-rain::after {
+  opacity: 0.72;
+  transform: translateY(0);
+}
+#app.is-home-view .scene-sky.is-rain .scene-orb,
+#app.is-home-view .scene-sky.is-snow .scene-orb { opacity: 0; transform: scale(0.72); }
+#app.is-home-view .scene-sky.is-cloudy .scene-orb { opacity: 0.42; }
+#app.is-home-view .scene-sky.is-rain .scene-weather,
+#app.is-home-view .scene-sky.is-snow .scene-weather { background: rgba(255,255,255,0.74); }
+#app.is-home-view .scene-sky.is-night.is-rain .scene-weather,
+#app.is-home-view .scene-sky.is-night.is-snow .scene-weather { background: rgba(16,24,48,0.62); }
+
+/* A photo is an actual contained image, not an unconstrained background layer. */
+.item-photo { overflow: hidden; }
+.item-photo-image {
+  display: block;
+  width: var(--card-image-size, 72%);
+  height: var(--card-image-size, 72%);
+  max-width: 100%;
+  max-height: 100%;
+  margin: auto;
+  object-fit: contain;
+  object-position: center;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 380px) {
+  #app.is-home-view .figure-board { width: min(96px, 29%); }
+  #app.is-home-view .scene-sky { height: 114px; }
+}
+
+@media (max-height: 720px) {
+  #app.is-home-view .scene-sky { height: 102px; }
+  #app.is-home-view .figure-board { width: min(88px, 27%); }
+  #app.is-home-view .figure-thumb { padding: 6%; }
+  #app.is-home-view .rack-row { margin-top: 6px; }
+}
