@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="衣櫥助手">
-<link rel="stylesheet" href="styles.css?v=20260824d">
+<link rel="stylesheet" href="styles.css?v=20260824e">
 </head>
 <body>
 
@@ -208,6 +208,20 @@
       </div>
       <div class="wishlist-grid" id="wishlistGrid"></div>
       <p class="empty-hint" id="wishlistEmpty" hidden>還沒有想買的單品，先記下一件吧。</p>
+
+      <section class="style-gallery-section" id="styleGallerySection">
+        <div class="style-gallery-head">
+          <button type="button" class="style-gallery-title-hit" id="btnOpenStyleGallery" aria-label="開啟風格走廊">
+            <span class="style-gallery-title">風格走廊</span>
+            <span class="style-gallery-subtitle">穿搭風格參考照片</span>
+          </button>
+          <button type="button" class="style-gallery-add-btn" id="btnAddStyleGallery" aria-label="加入風格走廊圖片" title="加入圖片"><span data-icon="plus"></span></button>
+        </div>
+        <div class="style-gallery-preview" id="styleGalleryPreview"></div>
+        <p class="style-gallery-empty" id="styleGalleryPreviewEmpty">把喜歡的穿搭氛圍集中在這裡，左右滑動查看。</p>
+        <input type="file" accept="image/*" id="styleGalleryInput" multiple hidden>
+      </section>
+
       <div class="wishlist-select-bar is-hidden" id="wishlistSelectBar">
         <p id="wishlistSelectCount">已選 0 件</p>
         <div class="select-bar-actions">
@@ -589,6 +603,31 @@
     </form>
   </div>
 
+  <!-- Style reference gallery manager -->
+  <div class="modal-sheet modal-sheet-tall" id="modal-style-gallery" data-modal>
+    <div class="modal-handle"></div>
+    <div class="modal-head"><h2>風格走廊</h2><button class="modal-close" data-close>✕</button></div>
+    <p class="section-intro style-gallery-manager-intro">拖曳照片右上角的把手可以重新排序。</p>
+    <div class="style-gallery-manager-toolbar">
+      <p class="style-gallery-manager-count" id="styleGalleryManagerCount">0 張照片</p>
+      <div class="style-gallery-manager-actions">
+        <button type="button" class="btn-secondary" id="btnStyleGalleryAdd"><span data-icon="plus"></span>加入</button>
+        <button type="button" class="select-mode-btn" id="btnStyleGallerySelectMode">選取</button>
+      </div>
+    </div>
+    <div class="style-gallery-manager-grid" id="styleGalleryManagerGrid"></div>
+    <p class="empty-hint" id="styleGalleryManagerEmpty" hidden>還沒有風格參考照片，先加入一張吧。</p>
+    <div class="style-gallery-select-bar is-hidden" id="styleGallerySelectBar">
+      <p id="styleGallerySelectCount">已選 0 張</p>
+      <div class="select-bar-actions">
+        <button type="button" class="btn-secondary" id="btnStyleGallerySelectAll">全選</button>
+        <button type="button" class="btn-secondary" id="btnStyleGalleryShareSelected"><span data-icon="share"></span>分享</button>
+        <button type="button" class="btn-secondary btn-danger" id="btnStyleGalleryDeleteSelected"><span data-icon="trash"></span>刪除</button>
+        <button type="button" class="btn-secondary" id="btnStyleGallerySelectCancel">取消</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Generic confirm (used by notification row taps) -->
   <div class="modal-sheet" id="modal-confirm" data-modal>
     <div class="modal-handle"></div>
@@ -601,7 +640,7 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="seed-items.js?v=20260824d"></script>
-<script src="app.js?v=20260824d"></script>
+<script src="seed-items.js?v=20260824e"></script>
+<script src="app.js?v=20260824e"></script>
 </body>
 </html>

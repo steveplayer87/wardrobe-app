@@ -12,6 +12,9 @@ const ICONS = {
   wardrobe: `<svg viewBox="0 0 24 24" fill="none"><rect x="4.5" y="3.5" width="15" height="17" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M12 3.5v17" stroke="currentColor" stroke-width="1.8"/><path d="M9.3 12v1.3M14.7 12v1.3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
   inspire: `<svg viewBox="0 0 24 24" fill="none"><path d="M12 3.5a5.5 5.5 0 0 1 3.2 10c-.6.4-1 1.1-1 1.9v.6H9.8v-.6c0-.8-.4-1.5-1-1.9a5.5 5.5 0 0 1 3.2-10Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9.8 19h4.4M10.3 21h3.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
   more: `<svg viewBox="0 0 24 24" fill="none"><circle cx="5" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="19" cy="12" r="1.8" fill="currentColor"/></svg>`,
+  plus: `<svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>`,
+  share: `<svg viewBox="0 0 24 24" fill="none"><path d="M12 15V4M8 8l4-4 4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 12v6.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`,
+  trash: `<svg viewBox="0 0 24 24" fill="none"><path d="M5 7h14M10 4h4l1 3H9l1-3ZM8 10v7M12 10v7M16 10v7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M6.5 7 7.2 19a1.5 1.5 0 0 0 1.5 1.4h6.6a1.5 1.5 0 0 0 1.5-1.4L17.5 7" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>`,
   washBoost: `<svg viewBox="0 0 24 24" fill="none"><path d="M12 3.5c1.5 2.2 3.8 4.6 3.8 7.4A3.8 3.8 0 1 1 8.2 11c0-2.8 2.3-5.2 3.8-7.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="m18.5 3.5.6 1.5 1.5.6-1.5.6-.6 1.5-.6-1.5-1.5-.6 1.5-.6.6-1.5ZM19.5 11l.4 1 .9.4-.9.4-.4 1-.4-1-.9-.4.9-.4.4-1Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>`,
   filter: `<svg viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="9" cy="6" r="2" fill="var(--color-surface)" stroke="currentColor" stroke-width="1.6"/><circle cx="16" cy="12" r="2" fill="var(--color-surface)" stroke="currentColor" stroke-width="1.6"/><circle cx="10" cy="18" r="2" fill="var(--color-surface)" stroke="currentColor" stroke-width="1.6"/></svg>`,
   search: `<svg viewBox="0 0 24 24" fill="none"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="1.7"/><path d="M19 19 15.2 15.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`,
@@ -318,6 +321,7 @@ function defaultState() {
     activeTowel: 'towelA',
     laundry: { lastWashDate: todayStr(), cycleDays: 2, snoozedUntil: null, history: [] },
     wishlist: [],
+    styleGallery: [],
     drafts: { addItem: null, wishlist: null },
   };
 }
@@ -346,6 +350,7 @@ function loadState() {
       activeTowel: parsed.activeTowel === 'towelB' ? 'towelB' : 'towelA',
       laundry: Object.assign({}, base.laundry, parsed.laundry || {}),
       wishlist: Array.isArray(parsed.wishlist) ? parsed.wishlist : [],
+      styleGallery: Array.isArray(parsed.styleGallery) ? parsed.styleGallery : [],
       drafts: Object.assign({}, base.drafts, parsed.drafts || {}),
     };
   } catch (e) {
@@ -364,6 +369,9 @@ function normalizeLoadedState() {
     if (item.status !== 'resting') item.restingSince = item.restingSince || null;
   });
   state.wishlist = Array.isArray(state.wishlist) ? state.wishlist : [];
+  state.styleGallery = (Array.isArray(state.styleGallery) ? state.styleGallery : [])
+    .filter(photo => photo && typeof photo.image === 'string' && photo.image)
+    .map(photo => ({ id: photo.id || uid(), image: photo.image, createdAt: photo.createdAt || Date.now() }));
   state.profile = state.profile || {};
   state.profile.cardImageScale = Math.min(100, Math.max(45, Number(state.profile.cardImageScale) || 72));
   state.profile.avatar = typeof state.profile.avatar === 'string' ? state.profile.avatar : '';
@@ -1664,7 +1672,239 @@ function renderWishlist() {
     grid.appendChild(card);
   });
   updateWishlistSelectBar();
+  renderStyleGalleryPreview();
   applyStaticIcons();
+}
+let uiStyleGallerySelectMode = false;
+let uiStyleGallerySelectedIds = new Set();
+let styleGalleryDragId = null;
+let styleGalleryPointerDrag = null;
+function attachStyleGalleryPointerDrag(card) {
+  card.addEventListener('pointerdown', e => {
+    if (uiStyleGallerySelectMode || e.pointerType === 'mouse' || e.target.closest('button')) return;
+    const drag = { id: card.dataset.id, overId: card.dataset.id, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, active: false, timer: null };
+    drag.timer = window.setTimeout(() => {
+      if (styleGalleryPointerDrag !== drag) return;
+      drag.active = true;
+      card.setPointerCapture?.(e.pointerId);
+      card.classList.add('is-dragging');
+    }, 280);
+    styleGalleryPointerDrag = drag;
+  });
+  card.addEventListener('pointermove', e => {
+    const drag = styleGalleryPointerDrag;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    if (!drag.active) {
+      if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) > 12) {
+        window.clearTimeout(drag.timer);
+        styleGalleryPointerDrag = null;
+      }
+      return;
+    }
+    e.preventDefault();
+    const target = document.elementFromPoint(e.clientX, e.clientY)?.closest('.style-gallery-manager-card');
+    if (target && target.parentElement === card.parentElement && target.dataset.id !== card.dataset.id) {
+      card.parentElement.querySelectorAll('.is-drag-over').forEach(el => el.classList.remove('is-drag-over'));
+      target.classList.add('is-drag-over');
+      drag.overId = target.dataset.id;
+    }
+  });
+  const finish = e => {
+    const drag = styleGalleryPointerDrag;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    window.clearTimeout(drag.timer);
+    styleGalleryPointerDrag = null;
+    card.classList.remove('is-dragging');
+    card.parentElement?.querySelectorAll('.is-drag-over').forEach(el => el.classList.remove('is-drag-over'));
+    if (drag.active && drag.overId !== drag.id) moveStyleGalleryPhoto(drag.id, drag.overId);
+  };
+  card.addEventListener('pointerup', finish);
+  card.addEventListener('pointercancel', finish);
+}
+
+function styleGalleryPhotoById(id) {
+  return state.styleGallery.find(photo => photo.id === id);
+}
+function updateStyleGallerySelectBar() {
+  const count = document.getElementById('styleGallerySelectCount');
+  if (count) count.textContent = `已選 ${uiStyleGallerySelectedIds.size} 張`;
+  document.getElementById('styleGallerySelectBar')?.classList.toggle('is-hidden', !uiStyleGallerySelectMode);
+}
+function setStyleGallerySelectMode(on) {
+  uiStyleGallerySelectMode = !!on;
+  if (!uiStyleGallerySelectMode) uiStyleGallerySelectedIds.clear();
+  const btn = document.getElementById('btnStyleGallerySelectMode');
+  if (btn) {
+    btn.classList.toggle('is-active', uiStyleGallerySelectMode);
+    btn.textContent = uiStyleGallerySelectMode ? '完成' : '選取';
+  }
+  updateStyleGallerySelectBar();
+  renderStyleGalleryManager();
+}
+function toggleStyleGallerySelection(id) {
+  if (uiStyleGallerySelectedIds.has(id)) uiStyleGallerySelectedIds.delete(id);
+  else uiStyleGallerySelectedIds.add(id);
+  updateStyleGallerySelectBar();
+  renderStyleGalleryManager();
+}
+function renderStyleGalleryPreview() {
+  const preview = document.getElementById('styleGalleryPreview');
+  const empty = document.getElementById('styleGalleryPreviewEmpty');
+  if (!preview || !empty) return;
+  const photos = Array.isArray(state.styleGallery) ? state.styleGallery : [];
+  preview.innerHTML = photos.map(photo => `
+    <button type="button" class="style-gallery-preview-card" data-gallery-id="${escapeHtml(photo.id)}" aria-label="開啟風格走廊照片">
+      <img src="${photo.image}" alt="風格參考照片" loading="lazy">
+    </button>
+  `).join('');
+  empty.hidden = photos.length > 0;
+  preview.querySelectorAll('[data-gallery-id]').forEach(card => card.addEventListener('click', () => openStyleGalleryManager()));
+}
+function moveStyleGalleryPhoto(draggedId, targetId) {
+  const from = state.styleGallery.findIndex(photo => photo.id === draggedId);
+  const to = state.styleGallery.findIndex(photo => photo.id === targetId);
+  if (from < 0 || to < 0 || from === to) return;
+  const [moved] = state.styleGallery.splice(from, 1);
+  state.styleGallery.splice(to, 0, moved);
+  saveState();
+  renderStyleGalleryManager();
+  renderStyleGalleryPreview();
+}
+function shiftStyleGalleryPhoto(id, direction) {
+  const index = state.styleGallery.findIndex(photo => photo.id === id);
+  const target = index + direction;
+  if (index < 0 || target < 0 || target >= state.styleGallery.length) return;
+  [state.styleGallery[index], state.styleGallery[target]] = [state.styleGallery[target], state.styleGallery[index]];
+  saveState();
+  renderStyleGalleryManager();
+  renderStyleGalleryPreview();
+}
+function renderStyleGalleryManager() {
+  const grid = document.getElementById('styleGalleryManagerGrid');
+  const empty = document.getElementById('styleGalleryManagerEmpty');
+  if (!grid || !empty) return;
+  const photos = Array.isArray(state.styleGallery) ? state.styleGallery : [];
+  uiStyleGallerySelectedIds = new Set([...uiStyleGallerySelectedIds].filter(id => photos.some(photo => photo.id === id)));
+  document.getElementById('styleGalleryManagerCount').textContent = `${photos.length} 張照片`;
+  empty.hidden = photos.length > 0;
+  grid.innerHTML = '';
+  photos.forEach((photo, index) => {
+    const card = document.createElement('article');
+    card.className = `style-gallery-manager-card${uiStyleGallerySelectedIds.has(photo.id) ? ' is-selected' : ''}`;
+    card.draggable = !uiStyleGallerySelectMode;
+    card.dataset.id = photo.id;
+    card.innerHTML = `
+      <div class="style-gallery-manager-photo"><img src="${photo.image}" alt="風格參考照片" draggable="false"><span class="style-gallery-drag-handle" title="拖曳排序">⋮⋮</span>${uiStyleGallerySelectMode ? '<span class="style-gallery-card-check"></span>' : ''}</div>
+      <div class="style-gallery-manager-card-foot">
+        <span class="style-gallery-photo-index">${index + 1}</span>
+        <div class="style-gallery-card-actions">
+          <button type="button" class="style-gallery-mini-btn" data-move="up" aria-label="往前移" ${index === 0 ? 'disabled' : ''}>↑</button>
+          <button type="button" class="style-gallery-mini-btn" data-move="down" aria-label="往後移" ${index === photos.length - 1 ? 'disabled' : ''}>↓</button>
+          <button type="button" class="style-gallery-mini-btn" data-share aria-label="分享這張照片"><span data-icon="share"></span></button>
+          <button type="button" class="style-gallery-mini-btn is-danger" data-delete aria-label="刪除這張照片"><span data-icon="trash"></span></button>
+        </div>
+      </div>
+    `;
+    card.addEventListener('click', e => {
+      if (!uiStyleGallerySelectMode || e.target.closest('button')) return;
+      toggleStyleGallerySelection(photo.id);
+    });
+    card.addEventListener('dragstart', e => {
+      if (uiStyleGallerySelectMode) { e.preventDefault(); return; }
+      styleGalleryDragId = photo.id;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', photo.id);
+      card.classList.add('is-dragging');
+    });
+    card.addEventListener('dragend', () => { styleGalleryDragId = null; card.classList.remove('is-dragging'); });
+    card.addEventListener('dragover', e => { if (!uiStyleGallerySelectMode) { e.preventDefault(); card.classList.add('is-drag-over'); } });
+    card.addEventListener('dragleave', () => card.classList.remove('is-drag-over'));
+    card.addEventListener('drop', e => {
+      e.preventDefault();
+      card.classList.remove('is-drag-over');
+      const draggedId = e.dataTransfer.getData('text/plain') || styleGalleryDragId;
+      if (draggedId) moveStyleGalleryPhoto(draggedId, photo.id);
+      styleGalleryDragId = null;
+    });
+    card.querySelector('[data-move="up"]')?.addEventListener('click', e => { e.stopPropagation(); shiftStyleGalleryPhoto(photo.id, -1); });
+    card.querySelector('[data-move="down"]')?.addEventListener('click', e => { e.stopPropagation(); shiftStyleGalleryPhoto(photo.id, 1); });
+    card.querySelector('[data-share]')?.addEventListener('click', async e => { e.stopPropagation(); await shareStyleGalleryPhotos([photo.id]); });
+    card.querySelector('[data-delete]')?.addEventListener('click', e => { e.stopPropagation(); confirmDeleteStyleGalleryPhoto(photo.id); });
+    attachStyleGalleryPointerDrag(card);
+    grid.appendChild(card);
+  });
+  updateStyleGallerySelectBar();
+  applyStaticIcons();
+}
+function openStyleGalleryManager() {
+  renderStyleGalleryManager();
+  openModal('modal-style-gallery');
+}
+async function addStyleGalleryFiles(fileList) {
+  const files = Array.from(fileList || []).filter(file => file && file.type && file.type.startsWith('image/'));
+  if (!files.length) return;
+  toast(`處理 ${files.length} 張風格照片中…`);
+  const added = [];
+  for (const file of files) {
+    try {
+      const image = await compressImageFile(file, 720, 0.82);
+      added.push({ id: uid(), image, createdAt: Date.now() });
+    } catch (err) {
+      // Skip only the file that cannot be decoded; preserve successfully processed photos.
+    }
+  }
+  if (added.length) {
+    state.styleGallery.push(...added);
+    saveState();
+    renderStyleGalleryPreview();
+    renderStyleGalleryManager();
+    toast(`已加入 ${added.length} 張風格照片`);
+  } else toast('風格照片處理失敗，請換一張試試');
+}
+async function shareStyleGalleryPhotos(ids) {
+  const photos = ids.map(styleGalleryPhotoById).filter(Boolean);
+  if (!photos.length) return;
+  try {
+    const files = [];
+    for (let i = 0; i < photos.length; i++) {
+      const response = await fetch(photos[i].image);
+      const blob = await response.blob();
+      const type = blob.type || 'image/jpeg';
+      const ext = type.includes('png') ? 'png' : 'jpg';
+      files.push(new File([blob], `風格走廊-${i + 1}.${ext}`, { type }));
+    }
+    if (navigator.share && (!navigator.canShare || navigator.canShare({ files }))) {
+      await navigator.share({ files, title: '風格走廊' });
+      toast('已開啟分享');
+      return;
+    }
+    photos.forEach((photo, index) => {
+      const link = document.createElement('a');
+      link.href = photo.image;
+      link.download = `風格走廊-${index + 1}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    });
+    toast('此裝置不支援直接分享，已準備下載照片');
+  } catch (err) {
+    if (err?.name !== 'AbortError') toast('分享未完成，請再試一次');
+  }
+}
+function confirmDeleteStyleGalleryPhoto(id) {
+  const photo = styleGalleryPhotoById(id);
+  if (!photo) return;
+  openConfirm('刪除這張風格照片？', '刪除後無法復原。', [
+    { label: '取消', kind: 'secondary', returnTo: 'modal-style-gallery' },
+    { label: '刪除', kind: 'danger', returnTo: 'modal-style-gallery', onClick: () => {
+      state.styleGallery = state.styleGallery.filter(item => item.id !== id);
+      uiStyleGallerySelectedIds.delete(id);
+      saveState();
+      renderStyleGalleryPreview();
+      renderStyleGalleryManager();
+      toast('已刪除風格照片');
+    } },
+  ]);
 }
 function renderWishlistCategoryChips() {
   const row = document.getElementById('wishlistCategoryChips');
@@ -2778,6 +3018,43 @@ function wireEvents() {
     renderWishlist();
     forceCloseModal();
     toast('已刪除想買單品');
+  });
+
+  // style corridor / reference photo gallery
+  const styleGalleryInput = document.getElementById('styleGalleryInput');
+  const triggerStyleGalleryInput = () => styleGalleryInput?.click();
+  document.getElementById('btnOpenStyleGallery').addEventListener('click', openStyleGalleryManager);
+  document.getElementById('styleGalleryPreviewEmpty').addEventListener('click', openStyleGalleryManager);
+  document.getElementById('btnAddStyleGallery').addEventListener('click', triggerStyleGalleryInput);
+  document.getElementById('btnStyleGalleryAdd').addEventListener('click', triggerStyleGalleryInput);
+  styleGalleryInput.addEventListener('change', async e => {
+    await addStyleGalleryFiles(e.target.files);
+    e.target.value = '';
+  });
+  document.getElementById('btnStyleGallerySelectMode').addEventListener('click', () => setStyleGallerySelectMode(!uiStyleGallerySelectMode));
+  document.getElementById('btnStyleGallerySelectCancel').addEventListener('click', () => setStyleGallerySelectMode(false));
+  document.getElementById('btnStyleGallerySelectAll').addEventListener('click', () => {
+    uiStyleGallerySelectedIds = new Set(state.styleGallery.map(photo => photo.id));
+    updateStyleGallerySelectBar();
+    renderStyleGalleryManager();
+  });
+  document.getElementById('btnStyleGalleryShareSelected').addEventListener('click', async () => {
+    await shareStyleGalleryPhotos([...uiStyleGallerySelectedIds]);
+  });
+  document.getElementById('btnStyleGalleryDeleteSelected').addEventListener('click', () => {
+    const ids = [...uiStyleGallerySelectedIds];
+    if (!ids.length) { toast('請先選取照片'); return; }
+    openConfirm('刪除選取的風格照片？', `共 ${ids.length} 張，刪除後無法復原。`, [
+      { label: '取消', kind: 'secondary', returnTo: 'modal-style-gallery' },
+      { label: '刪除', kind: 'danger', returnTo: 'modal-style-gallery', onClick: () => {
+        state.styleGallery = state.styleGallery.filter(photo => !uiStyleGallerySelectedIds.has(photo.id));
+        uiStyleGallerySelectedIds.clear();
+        saveState();
+        renderStyleGalleryPreview();
+        renderStyleGalleryManager();
+        toast('已刪除選取照片');
+      } },
+    ]);
   });
   window.addEventListener('pagehide', persistTransientForms);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') persistTransientForms(); });
