@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="衣櫥助手">
-<link rel="stylesheet" href="styles.css?v=20260823h">
+<link rel="stylesheet" href="styles.css?v=20260824a">
 </head>
 <body>
 
@@ -300,6 +300,17 @@
       <label class="field">名稱
         <input type="text" id="fieldName" placeholder="例如：純白棉質短袖T恤" required>
       </label>
+
+      <div class="field brand-field">
+        <span>品牌（選填）</span>
+        <div class="brand-input-row">
+          <input type="text" id="fieldBrand" placeholder="例如：UNIQLO、Nike、GU" autocomplete="organization">
+          <button type="button" class="btn-secondary brand-search-btn" id="btnBrandSearch"><span data-icon="search"></span><span>搜尋圖示</span></button>
+        </div>
+        <p class="settings-helper" id="brandSearchStatus">輸入品牌名稱後搜尋官方風格圖示。</p>
+        <div class="brand-search-results" id="brandSearchResults"></div>
+        <div class="brand-selected-preview is-hidden" id="brandSelectedPreview"></div>
+      </div>
 
       <div class="field">分類
         <div class="chip-row chip-row-form" id="categoryPickerChips"></div>
@@ -591,7 +602,7 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="seed-items.js?v=20260823h"></script>
-<script src="app.js?v=20260823h"></script>
+<script src="seed-items.js?v=20260824a"></script>
+<script src="app.js?v=20260824a"></script>
 </body>
 </html>

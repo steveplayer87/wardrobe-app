@@ -756,6 +756,83 @@ function thumbInner(item) {
   return item.image ? '' : (categoryIcon(item.category) || '');
 }
 
+const SIMPLE_ICONS_SLUGS_URL = 'https://raw.githubusercontent.com/simple-icons/simple-icons/develop/slugs.md';
+const SIMPLE_ICONS_CDN_URL = 'https://cdn.simpleicons.org/';
+const BRAND_NAME_ALIASES = {
+  '優衣庫': 'Uniqlo', 'ユニクロ': 'Uniqlo', '無印良品': 'Muji', '耐吉': 'Nike', '愛迪達': 'Adidas',
+  '匡威': 'Converse', '新百倫': 'New Balance', '彪馬': 'Puma', '北面': 'The North Face',
+  '迪卡儂': 'Decathlon', '古馳': 'Gucci', '香奈兒': 'Chanel', '路易威登': 'Louis Vuitton',
+};
+let brandIconCatalog = null;
+let brandIconCatalogPromise = null;
+let pendingBrandIcon = null;
+let pendingBrandName = '';
+function brandIconMarkup(item, size = 'tiny') {
+  if (!item?.brandIcon) return '';
+  return `<span class="brand-icon brand-icon-${size}"><img src="${escapeHtml(item.brandIcon)}" alt="" loading="lazy"></span>`;
+}
+function parseBrandSlugCatalog(markdown) {
+  return String(markdown || '').split('\n').map(line => {
+    const match = line.match(/^\|\s*([^|]+?)\s*\|\s*`([^`]+)`\s*\|/);
+    return match ? { name: match[1].trim().replace(/`/g, ''), slug: match[2].trim() } : null;
+  }).filter(Boolean);
+}
+async function loadBrandIconCatalog() {
+  if (brandIconCatalog) return brandIconCatalog;
+  if (!brandIconCatalogPromise) brandIconCatalogPromise = fetch(SIMPLE_ICONS_SLUGS_URL).then(r => { if (!r.ok) throw new Error('brand catalog failed'); return r.text(); }).then(parseBrandSlugCatalog).then(list => { brandIconCatalog = list; return list; });
+  return brandIconCatalogPromise;
+}
+function brandSearchTerms(query) {
+  const q = String(query || '').trim();
+  const alias = BRAND_NAME_ALIASES[q] || '';
+  return Array.from(new Set([q, alias, q.toLowerCase()].filter(Boolean)));
+}
+function findBrandIconMatches(query, catalog) {
+  const terms = brandSearchTerms(query).map(t => t.toLowerCase());
+  return catalog.map(entry => {
+    const name = entry.name.toLowerCase();
+    const score = Math.min(...terms.map(term => name === term ? 0 : name.startsWith(term) ? 1 : name.includes(term) ? 2 : 99));
+    return { ...entry, score };
+  }).filter(entry => entry.score < 99).sort((a, b) => a.score - b.score || a.name.localeCompare(b.name)).slice(0, 8);
+}
+function renderBrandSelectedPreview() {
+  const preview = document.getElementById('brandSelectedPreview');
+  if (!preview) return;
+  if (!pendingBrandIcon) { preview.classList.add('is-hidden'); preview.innerHTML = ''; return; }
+  preview.classList.remove('is-hidden');
+  preview.innerHTML = `${brandIconMarkup({ brandIcon: pendingBrandIcon }, 'medium')}<span>${escapeHtml(pendingBrandName || document.getElementById('fieldBrand')?.value.trim() || '')}</span><small>已選擇品牌圖示</small>`;
+}
+async function searchBrandIcons() {
+  const input = document.getElementById('fieldBrand');
+  const results = document.getElementById('brandSearchResults');
+  const status = document.getElementById('brandSearchStatus');
+  const query = input?.value.trim();
+  if (!results || !status || !query) { if (status) status.textContent = '請先輸入品牌名稱。'; return; }
+  results.innerHTML = '<p class="settings-helper">搜尋品牌圖示中…</p>';
+  status.textContent = '正在從網路尋找品牌圖示…';
+  try {
+    const catalog = await loadBrandIconCatalog();
+    const matches = findBrandIconMatches(query, catalog);
+    results.innerHTML = matches.length ? matches.map((match, index) => `<button type="button" class="brand-search-result" data-brand-index="${index}"><span class="brand-icon brand-icon-small"><img src="${SIMPLE_ICONS_CDN_URL}${encodeURIComponent(match.slug)}" alt="" loading="lazy"></span><span><b>${escapeHtml(match.name)}</b><small>${escapeHtml(match.slug)}</small></span></button>`).join('') : '<p class="settings-helper">找不到相符圖示，仍可保存品牌文字。</p>';
+    results._matches = matches;
+    status.textContent = matches.length ? `找到 ${matches.length} 個相符品牌，點選一個即可套用。` : '沒有相符圖示；品牌名稱仍會正常保存。';
+  } catch (error) {
+    results.innerHTML = '<p class="settings-helper">品牌圖示搜尋暫時無法連線，仍可保存品牌文字。</p>';
+    status.textContent = '搜尋失敗，請稍後再試。品牌欄位仍可正常保存。';
+  }
+}
+function syncBrandForm(brand, brandIcon) {
+  const input = document.getElementById('fieldBrand');
+  const results = document.getElementById('brandSearchResults');
+  const status = document.getElementById('brandSearchStatus');
+  if (input) input.value = brand || '';
+  pendingBrandName = brand || '';
+  pendingBrandIcon = brandIcon || null;
+  if (results) { results.innerHTML = ''; results._matches = []; }
+  if (status) status.textContent = brandIcon ? '已載入這件單品的品牌圖示。' : '輸入品牌名稱後搜尋官方風格圖示。';
+  renderBrandSelectedPreview();
+}
+
 function renderAvatar() {
   const img = document.getElementById('avatarImage');
   const fallback = document.getElementById('avatarFallback');
@@ -1056,6 +1133,7 @@ function buildItemCard(item, opts) {
     <div class="item-photo" style="${itemPhotoStyle(item)}">${thumbInner(item)}</div>
     ${uiSelectMode ? `<span class="item-card-check"></span>` : (item.status !== 'retired' ? `<span class="item-status-dot ${statusClass}"></span>` : '')}
     <div class="item-info">
+      ${item.brand ? `<p class="item-brand">${brandIconMarkup(item, 'tiny')}<span>${escapeHtml(item.brand)}</span></p>` : ''}
       <p class="item-name">${escapeHtml(item.name)}</p>
       <p class="item-wear">穿了 ${item.wearCount||0} 次${activityMeta}</p>
     </div>`;
@@ -1227,7 +1305,7 @@ function openDayDetail(dateStr, entry) {
   const rows = ALL_SLOTS.filter(s => entry[s]).map(s => {
     const item = findItem(entry[s]);
     if (!item) return `<div class="day-detail-row"><p class="ddr-name">（已刪除的衣物）</p></div>`;
-    const thumb = item.image ? `<img class="ddr-thumb" style="background-color:#fff" src="${item.image}" alt="">` : `<span class="ddr-thumb">${categoryIcon(item.category)}</span>`;
+      const thumb = item.image ? `<img class="ddr-thumb" style="background-color:#fff" src="${item.image}" alt="">` : `<span class="ddr-thumb">${categoryIcon(item.category)}</span>`;
     return `<button type="button" class="day-detail-row" data-item-id="${item.id}">${thumb}
       <div><p class="ddr-cat">${categoryLabel(item.category)}</p><p class="ddr-name">${escapeHtml(item.name)}</p></div></button>`;
   });
@@ -1622,6 +1700,7 @@ function openItemDetail(itemId) {
       <button class="detail-edit-btn" id="btnEditItem"></button>
     </div>
     <p class="detail-name">${escapeHtml(item.name)}</p>
+    ${item.brand ? `<p class="detail-brand">${brandIconMarkup(item, 'medium')}<span>${escapeHtml(item.brand)}</span></p>` : ''}
     <p class="detail-tags">${categoryLabel(item.category)}${lengthLabel ? ' · ' + lengthLabel : ''}${item.tags && item.tags.length ? ' · ' + item.tags.filter(t => t !== lengthLabel).map(escapeHtml).join('、') : ''} · ${statusLabel}</p>
     <div class="detail-stats">
       <div class="detail-stat"><b>${item.wearCount||0}</b><span>本輪穿著</span></div>
@@ -1712,6 +1791,8 @@ function autoSaveAddItemDraft() {
     archiveDirect: !!document.getElementById('fieldArchiveDirect')?.checked,
     image: pendingPhoto,
     imageBack: pendingPhotoBack,
+    brand: pendingBrandName.trim(),
+    brandIcon: pendingBrandIcon || null,
   };
   if (editingItemId) {
     const item = findItem(editingItemId);
@@ -1724,6 +1805,8 @@ function autoSaveAddItemDraft() {
         price: draft.price,
         image: draft.image || item.image,
         imageBack: draft.imageBack || item.imageBack || null,
+        brand: draft.brand,
+        brandIcon: draft.brandIcon || null,
       });
       if (item.status !== 'dirty' && item.status !== 'retired') item.status = computeStatusAfterWear(item);
     }
@@ -1811,6 +1894,8 @@ function openAddModal(editId = null) {
   editingItemId = editId;
   pendingPhoto = null;
   pendingPhotoBack = null;
+  pendingBrandName = '';
+  pendingBrandIcon = null;
   pendingCategory = 'top';
   pendingTags = [];
   formDirty = false;
@@ -1821,6 +1906,7 @@ function openAddModal(editId = null) {
   document.getElementById('photoPreviewWrap').innerHTML = `<span data-icon="camera"></span><span>上傳照片（可一次選2張，第2張當背面）</span>`;
   document.getElementById('photoBackHint').hidden = true;
   document.getElementById('btnReadjustPhoto').classList.add('is-hidden');
+  syncBrandForm('', null);
   applyStaticIcons();
 
   const editExtra = document.getElementById('editExtraActions');
@@ -1837,6 +1923,7 @@ function openAddModal(editId = null) {
     document.getElementById('fieldArchiveDirect').checked = !!savedDraft.archiveDirect;
     pendingPhoto = savedDraft.image || null;
     pendingPhotoBack = savedDraft.imageBack || null;
+    syncBrandForm(savedDraft.brand || '', savedDraft.brandIcon || null);
     setPhotoPreview(document.getElementById('photoPreviewWrap'), pendingPhoto, '上傳照片（可一次選2張，第2張當背面）');
     document.getElementById('photoBackHint').hidden = !pendingPhotoBack;
     document.getElementById('btnReadjustPhoto').classList.toggle('is-hidden', !pendingPhoto || !editId);
@@ -1846,9 +1933,11 @@ function openAddModal(editId = null) {
     const item = findItem(editId);
     pendingCategory = item.category;
     pendingTags = (item.tags || []).slice();
+    syncBrandForm(item.brand || '', item.brandIcon || null);
     document.getElementById('addModalTitle').textContent = '編輯單品';
     document.getElementById('addFormSubmitBtn').textContent = '儲存修改';
     document.getElementById('fieldName').value = item.name || '';
+    document.getElementById('fieldBrand').value = item.brand || '';
     document.getElementById('fieldPurchaseDate').value = item.purchaseDate || '';
     document.getElementById('fieldPrice').value = item.price ?? '';
     if (item.image) {
@@ -2615,6 +2704,32 @@ function wireEvents() {
     renderHistory();
   });
 
+  // brand search (public Simple Icons catalog; a missing icon never blocks saving)
+  document.getElementById('btnBrandSearch').addEventListener('click', searchBrandIcons);
+  document.getElementById('fieldBrand').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); searchBrandIcons(); } });
+  document.getElementById('fieldBrand').addEventListener('input', e => {
+    const typed = e.target.value.trim();
+    if (typed !== pendingBrandName) pendingBrandIcon = null;
+    pendingBrandName = typed;
+    formDirty = true;
+    renderBrandSelectedPreview();
+    autoSaveAddItemDraft();
+  });
+  document.getElementById('brandSearchResults').addEventListener('click', e => {
+    const result = e.target.closest('.brand-search-result');
+    if (!result) return;
+    const match = e.currentTarget._matches?.[Number(result.dataset.brandIndex)];
+    if (!match) return;
+    pendingBrandName = match.name;
+    pendingBrandIcon = `${SIMPLE_ICONS_CDN_URL}${encodeURIComponent(match.slug)}`;
+    document.getElementById('fieldBrand').value = pendingBrandName;
+    document.getElementById('brandSearchResults').innerHTML = '';
+    document.getElementById('brandSearchStatus').textContent = '已選擇品牌圖示；儲存後會顯示在單品資訊。';
+    formDirty = true;
+    renderBrandSelectedPreview();
+    autoSaveAddItemDraft();
+  });
+
   // photo upload (label already opens the native picker — no extra .click() here, that double-trigger was the bug)
   document.getElementById('photoInput').addEventListener('change', async e => {
     const files = Array.from(e.target.files || []);
@@ -2696,15 +2811,18 @@ function wireEvents() {
     const priceVal = document.getElementById('fieldPrice').value;
     const price = priceVal ? Number(priceVal) : null;
     const archiveDirect = document.getElementById('fieldArchiveDirect').checked;
+    const brand = document.getElementById('fieldBrand').value.trim();
+    pendingBrandName = brand;
+    const brandIcon = brand ? (pendingBrandIcon || null) : null;
 
     if (editingItemId) {
       const item = findItem(editingItemId);
-      Object.assign(item, { name, category, tags, purchaseDate, price, image: pendingPhoto || item.image, imageBack: pendingPhotoBack });
+      Object.assign(item, { name, category, tags, purchaseDate, price, image: pendingPhoto || item.image, imageBack: pendingPhotoBack, brand, brandIcon });
       toast('已儲存修改');
     } else {
       state.items.push({
         id: uid(), name, category, tags, purchaseDate, price,
-        image: pendingPhoto, imageBack: pendingPhotoBack,
+        image: pendingPhoto, imageBack: pendingPhotoBack, brand, brandIcon,
         wearCount: 0, totalWearCount: 0, status: archiveDirect ? 'retired' : 'clean',
         lastWornDate: null, wornToday: false, wearHistory: [], createdAt: Date.now(),
       });

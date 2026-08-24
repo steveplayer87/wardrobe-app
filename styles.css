@@ -737,3 +737,33 @@ body.home-page.night-page { background: linear-gradient(180deg, #232C48 0, #3640
 
 .avatar-btn.has-avatar { padding: 2px; overflow: hidden; }
 .avatar-btn #avatarImage { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; background: #fff; }
+
+
+/* =========================== Brand field and circular logo icons =========================== */
+.brand-field { gap: 7px; }
+.brand-input-row { display: flex; align-items: center; gap: 8px; }
+.brand-input-row input { flex: 1; min-width: 0; }
+.brand-search-btn { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px; padding: 9px 10px; font-size: 11px; white-space: nowrap; }
+.brand-search-btn span[data-icon] { width: 15px; height: 15px; }
+.brand-search-results { display: flex; flex-direction: column; gap: 6px; }
+.brand-search-result { width: 100%; display: flex; align-items: center; gap: 9px; padding: 7px 9px; border: 1px solid var(--color-line); border-radius: 13px; background: var(--color-surface); text-align: left; }
+.brand-search-result > span:last-child { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.brand-search-result b { font-size: 12px; font-weight: 800; }
+.brand-search-result small { font-size: 10px; color: var(--color-ink-faint); }
+.brand-icon { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; overflow: hidden; border-radius: 50%; background: #fff; border: 1px solid rgba(28,35,51,0.10); }
+.brand-icon img { width: 100%; height: 100%; display: block; object-fit: contain; background: #fff; }
+.brand-icon-small { width: 28px; height: 28px; padding: 4px; }
+.brand-icon-tiny { width: 17px; height: 17px; padding: 3px; }
+.brand-icon-medium { width: 34px; height: 34px; padding: 6px; box-shadow: 0 2px 8px rgba(28,35,51,0.10); }
+.brand-selected-preview { display: inline-flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 14px; background: var(--color-surface-2); color: var(--color-ink); }
+.brand-selected-preview > span:not(.brand-icon) { font-size: 12px; font-weight: 800; }
+.brand-selected-preview small { font-size: 10px; color: var(--color-ink-faint); }
+.item-brand, .detail-brand { display: flex; align-items: center; gap: 5px; color: var(--color-ink-soft); font-size: 10.5px; font-weight: 700; line-height: 1.2; }
+.item-brand { min-height: 18px; margin-bottom: 2px; }
+.detail-brand { justify-content: center; margin: 6px 0 9px; font-size: 13px; }
+.detail-brand .brand-icon-medium { width: 30px; height: 30px; }
+.item-brand span:not(.brand-icon) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 380px) {
+  .brand-search-btn { padding-left: 8px; padding-right: 8px; }
+  .brand-search-btn span:last-child { display: none; }
+}
